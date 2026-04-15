@@ -1,0 +1,30 @@
+Database Course Design Requirements
+
+I. Topic: Self-defined (including but not limited to pharmacy management systems, academic information management systems, library management systems, supermarket product sales management systems, medical information management systems, etc.).
+
+II. Requirements:  
+Complete the practical training task in groups of 3-4 people. Each group member needs to complete the development task of a specific system function and explain their contribution to that task in the documentation. The detail of the task requirements are as follows (taking the pharmacy management system as an example):
+Based on Huawei's openGauss, establish a chain pharmacy management system and its related database. The system users include: system administrators, pharmacy administrators, and salespersons.  
+- **System administrators** have the authority to manage (including adding, deleting, modifying, etc.) pharmacy administrators and salespersons.  
+- **Pharmacy administrators** are responsible for managing (including adding, deleting, modifying, etc.) drug-related information.  
+- **Salespersons** can use the system to search (by entering drug names, manufacturers, or codes) and sell drugs.
+
+III. Submission Files:  
+- Source code and executable files of the system (if applicable).  
+- A database application system development manual in English (template provided in Attachment 1).  
+- Database files and a demonstration video (no longer than 3 minutes).  
+Place all files in a folder named "Student Name + Development System Name," compress it, and submit it.
+
+IV. Submission Deadline: Before Friday of Week 15.
+
+V. Grading Criteria:  
+1. The database application system development manual accounts for 40 points out of 100, divided as follows:  
+   - Project planning: 10 points.  
+   - Database design: 20 points.  
+   - System development and implementation: 10 points.  
+
+2. System functionality accounts for 60 points out of 100, divided as follows:  
+   - User-friendly interface: 10 points.  
+   - Data addition, deletion, and modification functions: 10 points each.  
+   - Data query function: 10 points (if only exact query is implemented, 5 points will be awarded).  
+   - User permission management function: 10 points.
