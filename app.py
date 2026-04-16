@@ -572,81 +572,82 @@ else:
             else:
                 st.subheader("🔐 系统管理员 - 账号维护中心")
 
-                # 1. 显示所有用户
-                st.markdown("###  所有用户列表")
+                # 1. 加载所有用户（用于判断剩余管理员数量）
                 try:
                     conn = mm.create_connection()
                     cursor = conn.cursor()
                     cursor.execute("SELECT username, role FROM Users ORDER BY username")
                     user_list = cursor.fetchall()
                     users = [{"username": row[0], "role": row[1]} for row in user_list]
-                    conn.close()
 
-                    import pandas as pd
-                    df = pd.DataFrame(users)
-                    st.dataframe(df, use_container_width=True)
+                    # 计算当前系统管理员数量
+                    admin_count = sum(1 for u in users if u["role"] == "sys_admin")
+                    conn.close()
                 except:
                     users = [
                         {"username": "admin", "role": "sys_admin"},
                         {"username": "test_music_admin", "role": "music_admin"},
                         {"username": "test_listener", "role": "listener"},
                     ]
-                    import pandas as pd
-                    df = pd.DataFrame(users)
-                    st.dataframe(df, use_container_width=True)
+                    admin_count = 1
 
-                # 2. 修改用户角色
-                st.markdown("###  修改用户角色")
+                # 显示用户列表
+                st.markdown("### 📋 所有用户列表")
+                import pandas as pd
+                df = pd.DataFrame(users)
+                st.dataframe(df, use_container_width=True)
+
+                # 2. 修改角色（只能改 listener / music_admin）
+                st.markdown("### ✏️ 搜索用户并修改角色")
                 col1, col2 = st.columns(2)
                 with col1:
-                    selected_user = st.selectbox("选择要修改的用户", [u["username"] for u in users], key="edit_user")
+                    target_username = st.text_input("输入用户名", placeholder="输入要修改的用户名")
                 with col2:
-                    new_role = st.selectbox("设置新角色", ["sys_admin", "music_admin", "listener"], key="edit_role")
+                    new_role = st.selectbox("设置角色", ["listener", "music_admin"])
 
-                if st.button("✅ 保存用户修改"):
-                    try:
-                        conn = mm.create_connection()
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE Users SET role = %s WHERE username = %s", (new_role, selected_user))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"✅ 成功修改：{selected_user} → {new_role}")
-                    except Exception as e:
-                        st.error(f"修改失败：{str(e)}")
-
-                # 3. 删除用户
-                st.markdown("###  删除用户")
-                del_user = st.selectbox("选择要删除的用户", [u["username"] for u in users], key="del_user")
-                if st.button("❌ 确认删除该用户", type="secondary"):
-                    if del_user == "admin":
-                        st.error("❌ 管理员账号不能删除！")
+                if st.button("✅ 保存角色修改", type="primary"):
+                    if not target_username:
+                        st.warning("请输入用户名！")
+                    elif target_username in [u["username"] for u in users if u["role"] == "sys_admin"]:
+                        st.error("❌ 系统管理员不允许修改角色！")
                     else:
                         try:
                             conn = mm.create_connection()
                             cursor = conn.cursor()
-                            cursor.execute("DELETE FROM Users WHERE username = %s", (del_user,))
+                            cursor.execute("UPDATE Users SET role = %s WHERE username = %s", (new_role, target_username))
                             conn.commit()
                             conn.close()
-                            st.error(f"✅ 已删除用户：{del_user}")
+                            st.success(f"✅ 修改成功：{target_username} → {new_role}")
                         except Exception as e:
-                            st.error(f"删除失败：{str(e)}")
+                            st.error(f"修改失败：{str(e)}")
 
-                st.markdown("---")
-                # 4.提拔管理员
-                st.markdown("###  提拔管理员")
-                target_user = st.text_input("要提拔的目标用户名：")
-                target_role = st.selectbox("选择要赋予的高级职级：", ["music_admin", "sys_admin"])
-                
-                if st.button("赋予权力", type="primary"):
-                    conn = mm.create_connection()
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE Users SET role = %s WHERE username = %s RETURNING user_id", (target_role, target_user))
-                        if cursor.fetchone():
-                            conn.commit()
-                            st.success(f"✅ 执行成功！用户 {target_user} 已升级为 {target_role}")
+                # 3. 删除用户（安全规则：至少保留1位系统管理员）
+                st.markdown("### 🗑️ 删除用户")
+                del_username = st.text_input("输入要删除的用户名", placeholder="输入用户名", key="del_user")
+                confirm_delete = st.checkbox("我确认要删除（不可恢复）", key="confirm_del")
+
+                if st.button("❌ 确认删除用户", type="secondary"):
+                    if not del_username:
+                        st.warning("请输入要删除的用户名！")
+                    elif not confirm_delete:
+                        st.warning("请勾选确认删除！")
+                    else:
+                        # 获取要删除用户的角色
+                        is_deleting_admin = any(
+                            u["username"] == del_username and u["role"] == "sys_admin"
+                            for u in users
+                        )
+
+                        # 核心安全判断：不能删最后一个管理员
+                        if is_deleting_admin and admin_count <= 1:
+                            st.error("❌ 系统至少需要1位系统管理员，不允许删除！")
                         else:
-                            st.error("❌ 找不到此用户！")
-                    except Exception as e:
-                        st.error(str(e))
-                        conn.rollback()
+                            try:
+                                conn = mm.create_connection()
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM Users WHERE username = %s", (del_username,))
+                                conn.commit()
+                                conn.close()
+                                st.success(f"✅ 已删除：{del_username}")
+                            except Exception as e:
+                                st.error(f"删除失败：{str(e)}")
