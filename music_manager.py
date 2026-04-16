@@ -495,10 +495,13 @@ class MusicManager:
             JOIN Playlists p ON ps.playlist_id = p.playlist_id
             WHERE p.name = '我喜欢的歌曲'
             GROUP BY s.song_id, s.title, a.name, al.title, s.duration_seconds, s.audio_url, al.cover_url
-            ORDER BY like_count DESC
-            LIMIT 10;
+            ORDER BY like_count DESC, s.song_id ASC
+            LIMIT %s OFFSET %s;
             """
-            cursor.execute(likes_sql)
+            safe_limit = max(int(limit), 1)
+            safe_l_offset = max(int(l_offset), 0)
+            safe_c_offset = max(int(c_offset), 0)
+            cursor.execute(likes_sql, (safe_limit, safe_l_offset))
             likes_ranking = cursor.fetchall()
             
             # 聚合计算2：计算每首歌的评论数量
@@ -509,10 +512,10 @@ class MusicManager:
             LEFT JOIN Albums al ON s.album_id = al.album_id
             JOIN Comments c ON s.song_id = c.song_id
             GROUP BY s.song_id, s.title, a.name, al.title, s.duration_seconds, s.audio_url, al.cover_url
-            ORDER BY comment_count DESC
-            LIMIT 10;
+            ORDER BY comment_count DESC, s.song_id ASC
+            LIMIT %s OFFSET %s;
             """
-            cursor.execute(comments_sql)
+            cursor.execute(comments_sql, (safe_limit, safe_c_offset))
             comments_ranking = cursor.fetchall()
             
             return likes_ranking, comments_ranking
