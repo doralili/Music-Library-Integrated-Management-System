@@ -136,7 +136,14 @@ else:
                 if comments:
                     st.caption(f"共 {len(comments)} 条评论:")
                     for c_id, c_uid, c_user, c_avatar, c_content, c_time in comments:
-                        cn1, cn2 = st.columns([3, 1])
+                        can_delete_comment = (
+                            auth.current_user['user_id'] == c_uid or
+                            auth.current_user['role'] in ('sys_admin', 'music_admin')
+                        )
+                        if can_delete_comment:
+                            cn1, cn2, cn3 = st.columns([3, 1, 1])
+                        else:
+                            cn1, cn2 = st.columns([3, 1])
                         with cn1:
                             c_avatar_src = get_avatar_src(c_avatar)
                             if c_avatar_src:
@@ -148,6 +155,14 @@ else:
                             if st.button("看TA主页", key=f"go_u_{key_prefix}_{song_id}_{c_id}"):
                                 go_to_user_profile(c_uid)
                                 st.rerun()
+                        if can_delete_comment:
+                            with cn3:
+                                if st.button("删除评论", key=f"del_cmt_{key_prefix}_{song_id}_{c_id}"):
+                                    if mm.delete_comment(c_id):
+                                        st.success("评论已删除。")
+                                        st.rerun()
+                                    else:
+                                        st.error("删除评论失败。")
                         st.info(c_content)
                 else:
                     st.info("还没有人对这首歌发表评论，快来抢沙发吧🛋️！")
@@ -249,6 +264,12 @@ else:
                     view_pl_id = pl_options[view_pl_name]
                 
                 st.write(f"#### 💿 正在查看: {view_pl_name}")
+                if st.button("删除当前歌单", key=f"del_my_playlist_{view_pl_id}"):
+                    if mm.delete_playlist(view_pl_id):
+                        st.success("歌单已删除。")
+                        st.rerun()
+                    else:
+                        st.error("删除歌单失败。")
                 songs = mm.view_playlist(view_pl_id)
                 if songs:
                     for row in songs:
@@ -261,6 +282,30 @@ else:
                     st.warning("该歌单中暂时还没有歌曲哦。")
 
         # ----------------- Tab 2: 搜索 (发现音乐) -----------------
+            if auth.current_user['role'] in ('sys_admin', 'music_admin'):
+                st.divider()
+                st.subheader("管理员歌单删除")
+                all_playlists = mm.get_all_playlists()
+                if all_playlists:
+                    manage_opts = {
+                        f"{p[1]} (ID:{p[0]}) - {p[2]}": p[0]
+                        for p in all_playlists
+                    }
+                    target_playlist_name = st.selectbox(
+                        "选择任意歌单进行删除",
+                        options=list(manage_opts.keys()),
+                        key="admin_playlist_delete"
+                    )
+                    target_playlist_id = manage_opts[target_playlist_name]
+                    if st.button("删除所选歌单", key=f"admin_del_playlist_{target_playlist_id}"):
+                        if mm.delete_playlist(target_playlist_id):
+                            st.success("目标歌单已删除。")
+                            st.rerun()
+                        else:
+                            st.error("删除目标歌单失败。")
+                else:
+                    st.info("当前系统中还没有可管理的歌单。")
+
         with tab_search:
             st.header("🔍 发现音乐 (搜索与榜单)")
             st.subheader("🏆 全站音乐排行榜")

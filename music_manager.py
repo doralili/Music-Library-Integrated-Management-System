@@ -285,6 +285,62 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
+    @auth.require_role('music_admin', 'sys_admin')
+    def get_all_playlists(self):
+        """获取系统中的所有歌单，供管理员查看和删除"""
+        conn = create_connection()
+        if not conn: return []
+        try:
+            cursor = conn.cursor()
+            sql = """
+            SELECT p.playlist_id, p.name, u.username, p.created_at
+            FROM Playlists p
+            JOIN Users u ON p.creator_id = u.user_id
+            ORDER BY p.created_at DESC, p.playlist_id DESC
+            """
+            cursor.execute(sql)
+            return cursor.fetchall()
+        except Exception as e:
+            print(f"❌ 获取所有歌单失败: {e}")
+            return []
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    def delete_playlist(self, playlist_id):
+        """删除歌单。普通用户只能删自己的，管理员可删任意歌单"""
+        conn = create_connection()
+        if not conn: return False
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT creator_id, name FROM Playlists WHERE playlist_id = %s", (playlist_id,))
+            playlist = cursor.fetchone()
+            if not playlist:
+                print(f"❌ 找不到 ID={playlist_id} 的歌单。")
+                return False
+
+            creator_id, playlist_name = playlist
+            current_user = auth.current_user
+            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
+            if not can_manage_all and creator_id != current_user['user_id']:
+                print("❌ 操作拒绝：你只能删除自己的歌单！")
+                return False
+
+            cursor.execute("DELETE FROM Playlists WHERE playlist_id = %s", (playlist_id,))
+            conn.commit()
+            print(f"✅ 成功删除歌单 '{playlist_name}' (ID: {playlist_id})")
+            return True
+        except Exception as e:
+            print(f"❌ 删除歌单失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def add_to_playlist(self, playlist_id, song_id):
         """把歌曲添加到歌单"""
@@ -401,6 +457,43 @@ class MusicManager:
             return new_id
         except Exception as e:
             print(f"❌ 发布评论失败: {e}")
+            conn.rollback()
+            return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    def delete_comment(self, comment_id):
+        """删除评论。普通用户只能删自己的，管理员可删任意评论"""
+        conn = create_connection()
+        if not conn: return False
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT song_id, user_id FROM Comments WHERE comment_id = %s", (comment_id,))
+            comment = cursor.fetchone()
+            if not comment:
+                print(f"❌ 找不到 ID={comment_id} 的评论。")
+                return False
+
+            song_id, comment_user_id = comment
+            current_user = auth.current_user
+            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
+            if not can_manage_all and comment_user_id != current_user['user_id']:
+                print("❌ 操作拒绝：你只能删除自己的评论！")
+                return False
+
+            cursor.execute("DELETE FROM Comments WHERE comment_id = %s", (comment_id,))
+            cursor.execute(
+                "UPDATE Songs SET comment_count = GREATEST(comment_count - 1, 0) WHERE song_id = %s",
+                (song_id,)
+            )
+            conn.commit()
+            print(f"✅ 成功删除评论 ID={comment_id}")
+            return True
+        except Exception as e:
+            print(f"❌ 删除评论失败: {e}")
             conn.rollback()
             return False
         finally:
