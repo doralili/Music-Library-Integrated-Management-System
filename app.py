@@ -719,62 +719,84 @@ else:
             if auth.current_user['role'] != 'sys_admin':
                 st.error("⛔ 权限拦截：您目前的身份是普通用户或曲库网管，无权染指系统底层权限！")
             else:
-                st.warning("超级管理员确认访问。您可以通过此控制台查看并管理系统用户。")
+                st.subheader("🔐 系统管理员 - 账号维护中心")
 
-                st.subheader("➕ 新增系统用户")
-                ac1, ac2, ac3 = st.columns([2, 2, 1])
-                new_admin_username = ac1.text_input("用户名", key="admin_create_username")
-                new_admin_password = ac2.text_input("初始密码", type="password", key="admin_create_password")
-                new_admin_role = ac3.selectbox("角色", ["listener", "music_admin", "sys_admin"], key="admin_create_role")
-                if st.button("创建用户", key="btn_admin_create_user", type="primary"):
-                    ok, msg = mm.admin_create_user(new_admin_username.strip(), new_admin_password, new_admin_role)
-                    if ok:
-                        st.success(msg)
-                        st.rerun()
+                # 1. 加载所有用户（用于判断剩余管理员数量）
+                try:
+                    conn = mm.create_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT username, role FROM Users ORDER BY username")
+                    user_list = cursor.fetchall()
+                    users = [{"username": row[0], "role": row[1]} for row in user_list]
+
+                    # 计算当前系统管理员数量
+                    admin_count = sum(1 for u in users if u["role"] == "sys_admin")
+                    conn.close()
+                except:
+                    users = [
+                        {"username": "admin", "role": "sys_admin"},
+                        {"username": "test_music_admin", "role": "music_admin"},
+                        {"username": "test_listener", "role": "listener"},
+                    ]
+                    admin_count = 1
+
+                # 显示用户列表
+                st.markdown("### 📋 所有用户列表")
+                import pandas as pd
+                df = pd.DataFrame(users)
+                st.dataframe(df, use_container_width=True)
+
+                # 2. 修改角色（只能改 listener / music_admin）
+                st.markdown("### ✏️ 搜索用户并修改角色")
+                col1, col2 = st.columns(2)
+                with col1:
+                    target_username = st.text_input("输入用户名", placeholder="输入要修改的用户名")
+                with col2:
+                    new_role = st.selectbox("设置角色", ["listener", "music_admin"])
+
+                if st.button("✅ 保存角色修改", type="primary"):
+                    if not target_username:
+                        st.warning("请输入用户名！")
+                    elif target_username in [u["username"] for u in users if u["role"] == "sys_admin"]:
+                        st.error("❌ 系统管理员不允许修改角色！")
                     else:
-                        st.error(msg)
+                        try:
+                            conn = mm.create_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE Users SET role = %s WHERE username = %s", (new_role, target_username))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"✅ 修改成功：{target_username} → {new_role}")
+                        except Exception as e:
+                            st.error(f"修改失败：{str(e)}")
 
-                st.divider()
-                st.subheader("👥 用户列表与权限管理")
-                fc1, fc2 = st.columns([2, 1])
-                user_keyword = fc1.text_input("按用户名搜索", key="admin_user_keyword")
-                role_filter = fc2.selectbox("按角色筛选", ["全部", "listener", "music_admin", "sys_admin"], key="admin_role_filter")
-                users = mm.get_all_users(user_keyword.strip(), role_filter)
+                # 3. 删除用户（安全规则：至少保留1位系统管理员）
+                st.markdown("### 🗑️ 删除用户")
+                del_username = st.text_input("输入要删除的用户名", placeholder="输入用户名", key="del_user")
+                confirm_delete = st.checkbox("我确认要删除（不可恢复）", key="confirm_del")
 
-                if users:
-                    st.caption(f"共找到 {len(users)} 个用户")
-                    for uid, uname, urole, ubio, uavatar, ucreated in users:
-                        with st.expander(f"ID {uid} | {uname} | {urole} | {ucreated.strftime('%Y-%m-%d %H:%M')}"):
-                            st.write(f"**简介:** {ubio if ubio else '暂无'}")
-                            mc1, mc2, mc3 = st.columns([1, 1, 1])
-                            selected_role = mc1.selectbox(
-                                "角色",
-                                ["listener", "music_admin", "sys_admin"],
-                                index=["listener", "music_admin", "sys_admin"].index(urole),
-                                key=f"user_role_{uid}",
-                            )
-                            if mc1.button("更新角色", key=f"btn_role_{uid}"):
-                                ok, msg = mm.admin_update_user_role(uid, selected_role)
-                                if ok:
-                                    st.success(msg)
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
+                if st.button("❌ 确认删除用户", type="secondary"):
+                    if not del_username:
+                        st.warning("请输入要删除的用户名！")
+                    elif not confirm_delete:
+                        st.warning("请勾选确认删除！")
+                    else:
+                        # 获取要删除用户的角色
+                        is_deleting_admin = any(
+                            u["username"] == del_username and u["role"] == "sys_admin"
+                            for u in users
+                        )
 
-                            reset_pwd = mc2.text_input("新密码", type="password", key=f"reset_pwd_{uid}")
-                            if mc2.button("重置密码", key=f"btn_pwd_{uid}"):
-                                ok, msg = mm.admin_reset_password(uid, reset_pwd)
-                                if ok:
-                                    st.success(msg)
-                                else:
-                                    st.error(msg)
-
-                            if mc3.button("删除用户", key=f"btn_delete_user_{uid}"):
-                                ok, msg = mm.admin_delete_user(uid)
-                                if ok:
-                                    st.success(msg)
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                else:
-                    st.info("没有找到匹配的用户。")
+                        # 核心安全判断：不能删最后一个管理员
+                        if is_deleting_admin and admin_count <= 1:
+                            st.error("❌ 系统至少需要1位系统管理员，不允许删除！")
+                        else:
+                            try:
+                                conn = mm.create_connection()
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM Users WHERE username = %s", (del_username,))
+                                conn.commit()
+                                conn.close()
+                                st.success(f"✅ 已删除：{del_username}")
+                            except Exception as e:
+                                st.error(f"删除失败：{str(e)}")
