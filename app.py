@@ -73,20 +73,25 @@ if not auth.current_user:
                     st.error("两次输入的密码不一致！")
                 else:
                     try:
-                        add_user.__wrapped__(reg_username, reg_password, "listener")
-                        st.success("✅ 注册成功！请切换到 [🔐 账号登录] 面板进行登录！")
-                        st.balloons()
+                        if add_user.__wrapped__(reg_username, reg_password, "listener"):
+                            st.success("✅ 注册成功！请切换到 [🔐 账号登录] 面板进行登录！")
+                            st.balloons()
+                        else:
+                            st.error("注册失败，可能是用户名已经被占用了。")
                     except Exception as e:
                         st.error(f"注册失败，可能用户名已经被占用了。详细记录: {e}")
 
 else:
     # ====== 已登录：定义渲染歌曲卡片的组件 ======
-    def render_song_card(song_id, song_name, artist, album, duration, audio_url=None, cover_url=None, count_info="", key_prefix="search"):
+    def render_song_card(song_id, song_name, artist, album, duration, audio_url=None, cover_url=None, count_info="", key_prefix="search", playlist_id=None):
         title_text = f"{count_info}🎵 {song_name} - {artist} (专辑: {album})" if count_info else f"🎵 {song_name} - {artist} (专辑: {album})"
         with st.expander(title_text):
             if audio_url:
                 st.audio(audio_url)
-            scol1, scol2 = st.columns([3, 1])
+            if playlist_id is not None:
+                scol1, scol2, scol3 = st.columns([3, 1, 1])
+            else:
+                scol1, scol2 = st.columns([3, 1])
             with scol1:
                 st.write(f"**歌曲ID:** {song_id} &nbsp;|&nbsp; **时长:** {duration if duration else '未知'}秒")
             with scol2:
@@ -97,7 +102,16 @@ else:
                     if action == "liked": st.toast("已自动加入歌单【我喜欢的歌曲】！", icon="❤️")
                     else: st.toast("已从【我喜欢的歌曲】中移出。", icon="💔")
                     st.rerun()
-                    
+            if playlist_id is not None:
+                with scol3:
+                    if st.button("🗑️ 移出歌单", key=f"rm_pl_{key_prefix}_{playlist_id}_{song_id}", use_container_width=True):
+                        ok, msg = mm.remove_from_playlist(playlist_id, song_id)
+                        if ok:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                     
             st.divider()
             
             # --- 添加到歌单功能 ---
@@ -274,7 +288,12 @@ else:
                 if songs:
                     for row in songs:
                         s_id, s_name, s_art, s_alb, s_dur, s_aud, s_cov = row
-                        render_song_card(s_id, s_name, s_art, s_alb, s_dur, audio_url=s_aud, cover_url=s_cov, key_prefix=f"pl_{view_pl_id}_{s_id}")
+                        render_song_card(
+                            s_id, s_name, s_art, s_alb, s_dur,
+                            audio_url=s_aud, cover_url=s_cov,
+                            key_prefix=f"pl_{view_pl_id}_{s_id}",
+                            playlist_id=view_pl_id
+                        )
                     
                     total_time = sum(s[4] for s in songs if s[4])
                     st.info(f"📊 统计数据：共 {len(songs)} 首歌，总时长 {total_time // 60}分{total_time % 60}秒。")
@@ -303,6 +322,18 @@ else:
                             st.rerun()
                         else:
                             st.error("删除目标歌单失败。")
+
+                    admin_playlist_songs = mm.view_playlist(target_playlist_id)
+                    if admin_playlist_songs:
+                        st.caption("管理员可直接移除该歌单中的任意歌曲：")
+                        for row in admin_playlist_songs:
+                            s_id, s_name, s_art, s_alb, s_dur, s_aud, s_cov = row
+                            render_song_card(
+                                s_id, s_name, s_art, s_alb, s_dur,
+                                audio_url=s_aud, cover_url=s_cov,
+                                key_prefix=f"admin_pl_{target_playlist_id}_{s_id}",
+                                playlist_id=target_playlist_id
+                            )
                 else:
                     st.info("当前系统中还没有可管理的歌单。")
 
@@ -518,6 +549,24 @@ else:
                             st.rerun()
                         else:
                             st.error("更新失败（可能是用户名与系统里的其他用户重复了！）")
+
+                st.divider()
+                st.subheader("🧨 注销账号")
+                st.caption("此操作会永久删除当前账号及其关联数据，执行后需要重新注册。")
+                confirm_delete_name = st.text_input("请输入当前用户名以确认注销", key="confirm_delete_account_name")
+                if st.button("永久注销我的账号", key="btn_delete_current_account", use_container_width=True):
+                    if confirm_delete_name.strip() != curr_name:
+                        st.error("确认用户名不匹配，已取消注销。")
+                    else:
+                        ok, msg = mm.delete_current_user()
+                        if ok:
+                            st.success(msg)
+                            auth.logout()
+                            st.session_state.pop('current_user', None)
+                            st.session_state.view_user_id = None
+                            st.rerun()
+                        else:
+                            st.error(msg)
             
             with mc2:
                 st.subheader(f"📝 {curr_name}，看看你在论坛发过的帖子")
@@ -540,7 +589,7 @@ else:
             if auth.current_user['role'] not in ('sys_admin', 'music_admin'):
                 st.error("⛔ 权限拒绝：本页面属于后台系统，仅限【音乐管理员 / 系统管理员】访问。")
             else:
-                st.info("身份核划通过，您可以对系统全库歌曲进行修改和删除操作。")
+                st.info("身份核划通过，您可以对系统全库歌曲进行增加、修改和删除操作。")
                 with st.expander("➕ 增加新歌曲", expanded=True):
                     c1, c2 = st.columns(2)
                     n_title = c1.text_input("歌曲名称 *")
@@ -598,9 +647,64 @@ else:
                                 st.balloons()
                                 st.rerun()
                         else: st.error("歌名、歌手和专辑都不能为空！")
-                    if st.button("更新它！"):
-                        if mm.update_song(u_id, new_duration=u_dur): st.success("信息修正成功！")
-                        else: st.error("没找到这个ID的歌曲。")
+                with st.expander("✏️ 修改歌曲信息"):
+                    update_song_kw = st.text_input("输入歌曲名称关键字检索", key="update_song_keyword")
+                    song_search_results = mm.search_songs(update_song_kw.strip()) if update_song_kw.strip() else []
+                    selected_song_id = None
+                    if update_song_kw.strip():
+                        if song_search_results:
+                            song_opts = {
+                                f"{row[1]} - {row[2] or '未知歌手'} (ID:{row[0]})": row[0]
+                                for row in song_search_results
+                            }
+                            selected_song_label = st.selectbox(
+                                "选择要修改的歌曲",
+                                options=list(song_opts.keys()),
+                                key="update_song_select"
+                            )
+                            selected_song_id = song_opts[selected_song_label]
+                        else:
+                            st.warning("没有找到匹配的歌曲，请换个关键词。")
+
+                    song_detail = mm.get_song_detail(selected_song_id) if selected_song_id else None
+                    if song_detail:
+                        (
+                            song_id, old_title, old_artist_id, old_artist_name,
+                            old_album_id, old_album_title, old_duration, old_audio_url
+                        ) = song_detail
+                        st.caption(
+                            f"当前：{old_title} / {old_artist_name or '未知歌手'} / "
+                            f"{old_album_title or '未归档专辑'} / {old_duration or 0} 秒"
+                        )
+                    else:
+                        st.info("请先按歌曲名称检索并选择要修改的歌曲。")
+
+                    uc1, uc2 = st.columns(2)
+                    new_title = uc1.text_input("新歌曲名称（留空则不改）", key="update_song_title")
+                    new_duration_raw = uc2.number_input("新时长秒数（0 表示不改）", min_value=0, step=1, key="update_song_duration")
+                    new_artist_name = uc1.text_input("新歌手名称（留空则不改）", key="update_song_artist")
+                    new_album_name = uc2.text_input("新专辑名称（留空则不改）", key="update_song_album")
+                    new_audio_url = st.text_input("新音频 URL（留空则不改）", key="update_song_audio")
+
+                    if st.button("保存歌曲修改", key="btn_update_song", type="primary"):
+                        if not selected_song_id:
+                            st.error("请先选择要修改的歌曲。")
+                        else:
+                            new_artist_id = mm.get_or_create_artist(new_artist_name) if new_artist_name.strip() else None
+                            new_album_id = mm.get_or_create_album(new_album_name) if new_album_name.strip() else None
+                            ok = mm.update_song(
+                                selected_song_id,
+                                new_title=new_title.strip() or None,
+                                new_artist_id=new_artist_id,
+                                new_album_id=new_album_id,
+                                new_duration=new_duration_raw if new_duration_raw > 0 else None,
+                                new_audio_url=new_audio_url.strip() or None,
+                            )
+                            if ok:
+                                st.success("歌曲信息修正成功！")
+                                st.rerun()
+                            else:
+                                st.error("修改失败，请确认所选歌曲是否仍然存在。")
 
                 with st.expander("🗑️ 删除违规歌曲"):
                     st.warning("高危操作：从曲库中永久删除歌曲，包含级联删除。")
@@ -615,23 +719,62 @@ else:
             if auth.current_user['role'] != 'sys_admin':
                 st.error("⛔ 权限拦截：您目前的身份是普通用户或曲库网管，无权染指系统底层权限！")
             else:
-                st.warning("超级管理员确认访问。您可以通过此控制台提拔新的管理员！")
-                st.write("**步骤 1**: 在前端页面正常进行新用户的注册。")
-                st.write("**步骤 2**: 在下方填入该用户的用户名，将其提拔为管理员身份。")
-                
-                target_user = st.text_input("要提拔的目标用户名：")
-                target_role = st.selectbox("选择要赋予的高级职级：", ["music_admin", "sys_admin"])
-                
-                if st.button("赋予权力", type="primary"):
-                    conn = mm.create_connection()
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE Users SET role = %s WHERE username = %s RETURNING user_id", (target_role, target_user))
-                        if cursor.fetchone():
-                            conn.commit()
-                            st.success(f"✅ 执行成功！用户 {target_user} 将在下次登录时获得 {target_role} 权限。")
-                        else:
-                            st.error("❌ 找不到此用户！请确认用户名拼写无误。")
-                    except Exception as e:
-                        st.error(str(e))
-                        conn.rollback()
+                st.warning("超级管理员确认访问。您可以通过此控制台查看并管理系统用户。")
+
+                st.subheader("➕ 新增系统用户")
+                ac1, ac2, ac3 = st.columns([2, 2, 1])
+                new_admin_username = ac1.text_input("用户名", key="admin_create_username")
+                new_admin_password = ac2.text_input("初始密码", type="password", key="admin_create_password")
+                new_admin_role = ac3.selectbox("角色", ["listener", "music_admin", "sys_admin"], key="admin_create_role")
+                if st.button("创建用户", key="btn_admin_create_user", type="primary"):
+                    ok, msg = mm.admin_create_user(new_admin_username.strip(), new_admin_password, new_admin_role)
+                    if ok:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+                st.divider()
+                st.subheader("👥 用户列表与权限管理")
+                fc1, fc2 = st.columns([2, 1])
+                user_keyword = fc1.text_input("按用户名搜索", key="admin_user_keyword")
+                role_filter = fc2.selectbox("按角色筛选", ["全部", "listener", "music_admin", "sys_admin"], key="admin_role_filter")
+                users = mm.get_all_users(user_keyword.strip(), role_filter)
+
+                if users:
+                    st.caption(f"共找到 {len(users)} 个用户")
+                    for uid, uname, urole, ubio, uavatar, ucreated in users:
+                        with st.expander(f"ID {uid} | {uname} | {urole} | {ucreated.strftime('%Y-%m-%d %H:%M')}"):
+                            st.write(f"**简介:** {ubio if ubio else '暂无'}")
+                            mc1, mc2, mc3 = st.columns([1, 1, 1])
+                            selected_role = mc1.selectbox(
+                                "角色",
+                                ["listener", "music_admin", "sys_admin"],
+                                index=["listener", "music_admin", "sys_admin"].index(urole),
+                                key=f"user_role_{uid}",
+                            )
+                            if mc1.button("更新角色", key=f"btn_role_{uid}"):
+                                ok, msg = mm.admin_update_user_role(uid, selected_role)
+                                if ok:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+
+                            reset_pwd = mc2.text_input("新密码", type="password", key=f"reset_pwd_{uid}")
+                            if mc2.button("重置密码", key=f"btn_pwd_{uid}"):
+                                ok, msg = mm.admin_reset_password(uid, reset_pwd)
+                                if ok:
+                                    st.success(msg)
+                                else:
+                                    st.error(msg)
+
+                            if mc3.button("删除用户", key=f"btn_delete_user_{uid}"):
+                                ok, msg = mm.admin_delete_user(uid)
+                                if ok:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                else:
+                    st.info("没有找到匹配的用户。")
