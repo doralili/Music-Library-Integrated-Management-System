@@ -91,10 +91,10 @@ def add_user(new_username, new_password, role):
     """(系统管理员专属) 添加新用户。音乐管理员和听众不能调用此函数"""
     if role not in ('sys_admin', 'music_admin', 'listener'):
         print("❌ 角色无效！只能是 sys_admin, music_admin, 或 listener。")
-        return
+        return False
         
     conn = create_connection()
-    if not conn: return
+    if not conn: return False
     
     try:
         cursor = conn.cursor()
@@ -102,9 +102,11 @@ def add_user(new_username, new_password, role):
         cursor.execute(sql, (new_username, hash_password(new_password), role))
         conn.commit()
         print(f"✅ 成功添加新账号。用户名: {new_username}, 角色: {role}")
+        return True
     except Exception as e:
         print(f"❌ 添加用户失败（可能是用户名已存在）: {e}")
         conn.rollback()
+        return False
     finally:
         if conn:
             cursor.close()

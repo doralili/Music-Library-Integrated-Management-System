@@ -1,5 +1,7 @@
+from datetime import datetime
+
 from db_init import create_connection
-from auth import auth, add_user  # 导入我们在上一步做好的权限管理器和新建用户函数
+from auth import auth, add_user, hash_password  # 导入我们在上一步做好的权限管理器和新建用户函数
 
 class MusicManager:
     """
@@ -194,7 +196,7 @@ class MusicManager:
                 conn.close()
 
     @auth.require_role('sys_admin', 'music_admin')
-    def update_song(self, song_id, new_title=None, new_artist_id=None, new_album_id=None, new_duration=None):
+    def update_song(self, song_id, new_title=None, new_artist_id=None, new_album_id=None, new_duration=None, new_audio_url=None):
         """
         修改歌曲信息。只修改传入的参数，如果不传则保留原值。
         这里使用了 SQL 中的 COALESCE 函数，非常巧妙哦！
@@ -209,11 +211,12 @@ class MusicManager:
                 SET title = COALESCE(%s, title),
                     artist_id = COALESCE(%s, artist_id),
                     album_id = COALESCE(%s, album_id),
-                    duration_seconds = COALESCE(%s, duration_seconds)
+                    duration_seconds = COALESCE(%s, duration_seconds),
+                    audio_url = COALESCE(%s, audio_url)
                 WHERE song_id = %s
                 RETURNING title
             """
-            cursor.execute(sql, (new_title, new_artist_id, new_album_id, new_duration, song_id))
+            cursor.execute(sql, (new_title, new_artist_id, new_album_id, new_duration, new_audio_url, song_id))
             updated = cursor.fetchone()
             if updated:
                 conn.commit()
@@ -280,6 +283,32 @@ class MusicManager:
         except Exception as e:
             print(f"❌ 获取歌单失败: {e}")
             return []
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin', 'music_admin')
+    def get_song_detail(self, song_id):
+        """按 ID 查询歌曲详情，供管理端修改前核对。"""
+        conn = create_connection()
+        if not conn: return None
+        try:
+            cursor = conn.cursor()
+            sql = """
+            SELECT
+                s.song_id, s.title, s.artist_id, a.name, s.album_id, al.title,
+                s.duration_seconds, s.audio_url
+            FROM Songs s
+            LEFT JOIN Artists a ON s.artist_id = a.artist_id
+            LEFT JOIN Albums al ON s.album_id = al.album_id
+            WHERE s.song_id = %s
+            """
+            cursor.execute(sql, (song_id,))
+            return cursor.fetchone()
+        except Exception as e:
+            print(f"❌ 查询歌曲详情失败: {e}")
+            return None
         finally:
             if conn:
                 cursor.close()
@@ -449,8 +478,8 @@ class MusicManager:
         try:
             cursor = conn.cursor()
             user_id = auth.current_user['user_id']
-            sql = "INSERT INTO Comments (song_id, user_id, content) VALUES (%s, %s, %s) RETURNING comment_id"
-            cursor.execute(sql, (song_id, user_id, content))
+            sql = "INSERT INTO Comments (song_id, user_id, content, created_at) VALUES (%s, %s, %s, %s) RETURNING comment_id"
+            cursor.execute(sql, (song_id, user_id, content, datetime.now()))
             new_id = cursor.fetchone()[0]
             conn.commit()
             print(f"✅ 成功发布评论 (ID: {new_id})")
@@ -459,6 +488,43 @@ class MusicManager:
             print(f"❌ 发布评论失败: {e}")
             conn.rollback()
             return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    def remove_from_playlist(self, playlist_id, song_id):
+        """从歌单中删除歌曲。普通用户只能删自己歌单里的歌，管理员可删任意歌单。"""
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT creator_id, name FROM Playlists WHERE playlist_id = %s", (playlist_id,))
+            playlist = cursor.fetchone()
+            if not playlist:
+                return False, "找不到目标歌单。"
+
+            creator_id, playlist_name = playlist
+            current_user = auth.current_user
+            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
+            if not can_manage_all and creator_id != current_user['user_id']:
+                return False, "你只能删除自己歌单里的歌曲。"
+
+            cursor.execute(
+                "DELETE FROM Playlist_Songs WHERE playlist_id = %s AND song_id = %s RETURNING song_id",
+                (playlist_id, song_id)
+            )
+            deleted = cursor.fetchone()
+            if not deleted:
+                conn.rollback()
+                return False, "该歌曲不在目标歌单中。"
+
+            conn.commit()
+            return True, f"已从歌单《{playlist_name}》中移除该歌曲。"
+        except Exception as e:
+            conn.rollback()
+            return False, f"删除歌单歌曲失败: {e}"
         finally:
             if conn:
                 cursor.close()
@@ -763,6 +829,162 @@ class MusicManager:
             # 如果用户名重复会有错误抛出
             conn.rollback()
             return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    # ==========================================
+    # 系统管理员用户管理
+    # ==========================================
+    @auth.require_role('sys_admin')
+    def get_all_users(self, keyword="", role_filter="全部"):
+        """系统管理员查看用户列表，支持按用户名模糊搜索和角色筛选。"""
+        conn = create_connection()
+        if not conn: return []
+        try:
+            cursor = conn.cursor()
+            sql = """
+            SELECT user_id, username, role, bio, avatar_url, created_at
+            FROM Users
+            WHERE (%s = '' OR username ILIKE %s)
+              AND (%s = '全部' OR role = %s)
+            ORDER BY created_at DESC, user_id DESC
+            """
+            pattern = f"%{keyword}%"
+            cursor.execute(sql, (keyword, pattern, role_filter, role_filter))
+            return cursor.fetchall()
+        except Exception as e:
+            print(f"❌ 获取用户列表失败: {e}")
+            return []
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    def delete_current_user(self):
+        """用户主动注销自己的账号。"""
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            user_id = auth.current_user['user_id']
+            cursor.execute("DELETE FROM Users WHERE user_id = %s RETURNING username", (user_id,))
+            deleted = cursor.fetchone()
+            if not deleted:
+                conn.rollback()
+                return False, "找不到当前账号。"
+            conn.commit()
+            return True, f"账号 {deleted[0]} 已注销。"
+        except Exception as e:
+            conn.rollback()
+            return False, f"注销账号失败: {e}"
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_create_user(self, username, password, role):
+        """系统管理员创建任意角色用户。"""
+        if role not in ('sys_admin', 'music_admin', 'listener'):
+            return False, "角色无效。"
+        if not username or not password:
+            return False, "用户名和密码不能为空。"
+
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO Users (username, password_hash, role) VALUES (%s, %s, %s) RETURNING user_id",
+                (username, hash_password(password), role)
+            )
+            new_user_id = cursor.fetchone()[0]
+            conn.commit()
+            return True, f"已创建用户 {username} (ID: {new_user_id})。"
+        except Exception as e:
+            conn.rollback()
+            return False, f"创建用户失败，可能是用户名已存在: {e}"
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_update_user_role(self, user_id, new_role):
+        """系统管理员修改指定用户角色。"""
+        if new_role not in ('sys_admin', 'music_admin', 'listener'):
+            return False, "角色无效。"
+
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE Users SET role = %s WHERE user_id = %s RETURNING username", (new_role, user_id))
+            updated = cursor.fetchone()
+            if not updated:
+                conn.rollback()
+                return False, "找不到该用户。"
+            conn.commit()
+            return True, f"用户 {updated[0]} 的角色已更新为 {new_role}。"
+        except Exception as e:
+            conn.rollback()
+            return False, f"修改角色失败: {e}"
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_reset_password(self, user_id, new_password):
+        """系统管理员重置指定用户密码。"""
+        if not new_password:
+            return False, "新密码不能为空。"
+
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE Users SET password_hash = %s WHERE user_id = %s RETURNING username",
+                (hash_password(new_password), user_id)
+            )
+            updated = cursor.fetchone()
+            if not updated:
+                conn.rollback()
+                return False, "找不到该用户。"
+            conn.commit()
+            return True, f"用户 {updated[0]} 的密码已重置。"
+        except Exception as e:
+            conn.rollback()
+            return False, f"重置密码失败: {e}"
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_delete_user(self, user_id):
+        """系统管理员删除用户，禁止删除当前登录账号。"""
+        if auth.current_user and user_id == auth.current_user['user_id']:
+            return False, "不能删除当前登录的管理员账号。"
+
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Users WHERE user_id = %s RETURNING username", (user_id,))
+            deleted = cursor.fetchone()
+            if not deleted:
+                conn.rollback()
+                return False, "找不到该用户。"
+            conn.commit()
+            return True, f"用户 {deleted[0]} 已删除。"
+        except Exception as e:
+            conn.rollback()
+            return False, f"删除用户失败: {e}"
         finally:
             if conn:
                 cursor.close()
