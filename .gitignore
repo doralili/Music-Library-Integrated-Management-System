@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+jamendo_page_*.json
+songs_*.json
+songs_*.csv
+*.log
+__pycache__/
