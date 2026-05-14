@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+  <defs>
+    <style>
+      .entity { fill: #ffffff; stroke: #1f2937; stroke-width: 2.2; rx: 10; ry: 10; }
+      .relation { fill: #fff4d6; stroke: #8a6a00; stroke-width: 2.2; }
+      .attr { fill: #eef6ff; stroke: #4d78a8; stroke-width: 1.8; }
+      .line { fill: none; stroke: #374151; stroke-width: 2; }
+      .label { font: 600 18px 'Microsoft YaHei', 'PingFang SC', sans-serif; fill: #111827; text-anchor: middle; dominant-baseline: middle; }
+      .rlabel { font: 700 16px 'Microsoft YaHei', 'PingFang SC', sans-serif; fill: #7c5a00; text-anchor: middle; dominant-baseline: middle; }
+      .small { font: 500 14px 'Microsoft YaHei', 'PingFang SC', sans-serif; fill: #111827; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="1200" fill="#ffffff"/>
+
+  <!-- Entities -->
+  <rect x="80" y="120" width="120" height="52" class="entity"/>
+  <text x="140" y="146" class="label">歌手</text>
+
+  <rect x="350" y="120" width="120" height="52" class="entity"/>
+  <text x="410" y="146" class="label">专辑</text>
+
+  <rect x="620" y="220" width="120" height="52" class="entity"/>
+  <text x="680" y="246" class="label">歌曲</text>
+
+  <rect x="80" y="440" width="120" height="52" class="entity"/>
+  <text x="140" y="466" class="label">用户</text>
+
+  <rect x="350" y="330" width="120" height="52" class="entity"/>
+  <text x="410" y="356" class="label">歌曲评论</text>
+
+  <rect x="620" y="440" width="120" height="52" class="entity"/>
+  <text x="680" y="466" class="label">歌单</text>
+
+  <rect x="350" y="710" width="120" height="52" class="entity"/>
+  <text x="410" y="736" class="label">帖子</text>
+
+  <rect x="620" y="850" width="120" height="52" class="entity"/>
+  <text x="680" y="876" class="label">帖子评论</text>
+
+  <!-- Relations -->
+  <polygon points="275,132 305,146 275,160 245,146" class="relation"/>
+  <text x="275" y="146" class="rlabel">创作</text>
+
+  <polygon points="545,232 575,246 545,260 515,246" class="relation"/>
+  <text x="545" y="246" class="rlabel">收录</text>
+
+  <polygon points="275,232 305,246 275,260 245,246" class="relation"/>
+  <text x="275" y="246" class="rlabel">演唱</text>
+
+  <polygon points="275,342 305,356 275,370 245,356" class="relation"/>
+  <text x="275" y="356" class="rlabel">发表</text>
+
+  <polygon points="545,342 575,356 545,370 515,356" class="relation"/>
+  <text x="545" y="356" class="rlabel">针对</text>
+
+  <polygon points="275,452 305,466 275,480 245,466" class="relation"/>
+  <text x="275" y="466" class="rlabel">创建</text>
+
+  <polygon points="545,452 575,466 545,480 515,466" class="relation"/>
+  <text x="545" y="466" class="rlabel">包含</text>
+
+  <polygon points="275,722 305,736 275,750 245,736" class="relation"/>
+  <text x="275" y="736" class="rlabel">发帖</text>
+
+  <polygon points="545,722 575,736 545,750 515,736" class="relation"/>
+  <text x="545" y="736" class="rlabel">推荐</text>
+
+  <polygon points="545,862 575,876 545,890 515,876" class="relation"/>
+  <text x="545" y="876" class="rlabel">针对</text>
+
+  <polygon points="410,982 440,996 410,1010 380,996" class="relation"/>
+  <text x="410" y="996" class="rlabel">评论</text>
+
+  <!-- Relationship attribute -->
+  <ellipse cx="545" cy="560" rx="56" ry="18" class="attr"/>
+  <text x="545" y="560" class="small">加入时间</text>
+  <path d="M545 480 L545 542" class="line"/>
+
+  <!-- Top area -->
+  <path d="M200 146 L245 146" class="line"/>
+  <text x="222" y="134" class="small">1</text>
+  <path d="M305 146 L350 146" class="line"/>
+  <text x="328" y="134" class="small">N</text>
+
+  <path d="M200 156 L220 156 L220 246 L245 246" class="line"/>
+  <text x="228" y="204" class="small">1</text>
+  <path d="M305 246 L515 246" class="line"/>
+  <text x="410" y="234" class="small">N</text>
+
+  <path d="M470 146 L545 146 L545 232" class="line"/>
+  <text x="505" y="134" class="small">1</text>
+  <path d="M575 246 L620 246" class="line"/>
+  <text x="596" y="234" class="small">N</text>
+
+  <!-- Song comment area -->
+  <path d="M200 356 L245 356" class="line"/>
+  <text x="222" y="344" class="small">1</text>
+  <path d="M305 356 L350 356" class="line"/>
+  <text x="328" y="344" class="small">N</text>
+
+  <path d="M470 356 L515 356" class="line"/>
+  <text x="492" y="344" class="small">N</text>
+  <path d="M575 356 L680 356 L680 272" class="line"/>
+  <text x="662" y="320" class="small">1</text>
+
+  <!-- Playlist area -->
+  <path d="M200 466 L245 466" class="line"/>
+  <text x="222" y="454" class="small">1</text>
+  <path d="M305 466 L620 466" class="line"/>
+  <text x="462" y="454" class="small">N</text>
+
+  <path d="M620 480 L575 480" class="line"/>
+  <text x="598" y="500" class="small">M</text>
+  <path d="M515 466 L500 466 L500 246 L620 246" class="line"/>
+  <text x="512" y="344" class="small">N</text>
+
+  <!-- Post area -->
+  <path d="M200 736 L245 736" class="line"/>
+  <text x="222" y="724" class="small">1</text>
+  <path d="M305 736 L350 736" class="line"/>
+  <text x="328" y="724" class="small">N</text>
+
+  <path d="M470 736 L515 736" class="line"/>
+  <text x="492" y="724" class="small">N</text>
+  <path d="M575 736 L680 736 L680 272" class="line"/>
+  <text x="662" y="516" class="small">1</text>
+
+  <!-- Post comment area -->
+  <path d="M470 876 L515 876" class="line"/>
+  <text x="492" y="864" class="small">1</text>
+  <path d="M575 876 L620 876" class="line"/>
+  <text x="598" y="864" class="small">N</text>
+
+  <path d="M140 492 L140 1030 L410 1030 L410 1010" class="line"/>
+  <text x="154" y="1002" class="small">1</text>
+
+  <path d="M410 762 L410 982" class="line"/>
+  <text x="394" y="874" class="small">1</text>
+  <path d="M440 996 L620 996 L620 902" class="line"/>
+  <text x="532" y="984" class="small">N</text>
+</svg>

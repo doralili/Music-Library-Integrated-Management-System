@@ -1,6 +1,7 @@
 import psycopg2
 from psycopg2 import Error
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from werkzeug.security import generate_password_hash
 
 # ================= 配置区 =================
 DB_HOST = "127.0.0.1"
@@ -8,6 +9,8 @@ DB_PORT = "5432"
 DB_USER = "myadmin"
 DB_PASS = "Axmo@9830"
 DB_NAME = "music"
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "admin123"
 # ==========================================
 
 
@@ -92,13 +95,13 @@ def initialize_database():
 
     CREATE TABLE IF NOT EXISTS Artists (
         artist_id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
+        name VARCHAR(100) CONSTRAINT uq_artists_name UNIQUE NOT NULL,
         description TEXT
     );
 
     CREATE TABLE IF NOT EXISTS Albums (
         album_id SERIAL PRIMARY KEY,
-        title VARCHAR(100) NOT NULL,
+        title VARCHAR(100) CONSTRAINT uq_albums_title UNIQUE NOT NULL,
         artist_id INT REFERENCES Artists(artist_id) ON DELETE CASCADE,
         release_year INT,
         cover_url VARCHAR(500)
@@ -119,9 +122,10 @@ def initialize_database():
         title VARCHAR(150) NOT NULL,
         artist_id INT REFERENCES Artists(artist_id) ON DELETE CASCADE,
         album_id INT REFERENCES Albums(album_id) ON DELETE SET NULL,
-        duration_seconds INT,
+        duration_seconds INT CONSTRAINT chk_songs_duration_positive CHECK (duration_seconds IS NULL OR duration_seconds > 0),
         audio_url VARCHAR(500),
-        comment_count INT DEFAULT 0
+        comment_count INT DEFAULT 0 CONSTRAINT chk_songs_comment_count_nonnegative CHECK (comment_count >= 0),
+        CONSTRAINT uq_songs_title_artist_album UNIQUE (title, artist_id, album_id)
     );
 
     DO $$
@@ -143,7 +147,8 @@ def initialize_database():
         playlist_id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         creator_id INT REFERENCES Users(user_id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_playlists_creator_name UNIQUE (creator_id, name)
     );
 
     CREATE TABLE IF NOT EXISTS Playlist_Songs (
@@ -194,6 +199,22 @@ def initialize_database():
     FOR EACH ROW
     EXECUTE PROCEDURE update_song_comment_count();
 
+    CREATE OR REPLACE FUNCTION decrease_song_comment_count()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        UPDATE Songs
+        SET comment_count = GREATEST(comment_count - 1, 0)
+        WHERE song_id = OLD.song_id;
+        RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS trg_after_delete_comment ON Comments;
+    CREATE TRIGGER trg_after_delete_comment
+    AFTER DELETE ON Comments
+    FOR EACH ROW
+    EXECUTE PROCEDURE decrease_song_comment_count();
+
     CREATE OR REPLACE VIEW v_user_posts AS
     SELECT
         p.post_id,
@@ -217,9 +238,35 @@ def initialize_database():
     LEFT JOIN Albums alb ON s.album_id = alb.album_id;
 
     CREATE INDEX IF NOT EXISTS idx_songs_title ON Songs(title);
+    CREATE INDEX IF NOT EXISTS idx_songs_artist_id ON Songs(artist_id);
+    CREATE INDEX IF NOT EXISTS idx_songs_album_id ON Songs(album_id);
     CREATE INDEX IF NOT EXISTS idx_comments_user_id ON Comments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_song_id ON Comments(song_id);
     CREATE INDEX IF NOT EXISTS idx_playlists_creator ON Playlists(creator_id);
     CREATE INDEX IF NOT EXISTS idx_posts_user_id ON Posts(user_id);
+
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_artists_name') THEN
+            ALTER TABLE Artists ADD CONSTRAINT uq_artists_name UNIQUE (name);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_albums_title') THEN
+            ALTER TABLE Albums ADD CONSTRAINT uq_albums_title UNIQUE (title);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_songs_duration_positive') THEN
+            ALTER TABLE Songs ADD CONSTRAINT chk_songs_duration_positive CHECK (duration_seconds IS NULL OR duration_seconds > 0);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_songs_comment_count_nonnegative') THEN
+            ALTER TABLE Songs ADD CONSTRAINT chk_songs_comment_count_nonnegative CHECK (comment_count >= 0);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_songs_title_artist_album') THEN
+            ALTER TABLE Songs ADD CONSTRAINT uq_songs_title_artist_album UNIQUE (title, artist_id, album_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_playlists_creator_name') THEN
+            ALTER TABLE Playlists ADD CONSTRAINT uq_playlists_creator_name UNIQUE (creator_id, name);
+        END IF;
+    END;
+    $$;
     """
 
     if not create_database():
@@ -240,6 +287,103 @@ def initialize_database():
         finally:
             cursor.close()
             conn.close()
+
+    initialize_seed_data()
+
+
+def initialize_seed_data():
+    """
+    插入默认管理员和演示测试数据。
+    使用查询后插入的方式保持脚本可重复执行，避免重复创建相同记录。
+    """
+    conn = create_connection()
+    if not conn:
+        return
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT user_id FROM Users WHERE username = %s", (DEFAULT_ADMIN_USERNAME,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO Users (username, password_hash, role) VALUES (%s, %s, %s)",
+                (
+                    DEFAULT_ADMIN_USERNAME,
+                    generate_password_hash(DEFAULT_ADMIN_PASSWORD, method="pbkdf2:sha256"),
+                    "sys_admin",
+                ),
+            )
+
+        seed_artists = [
+            ("周杰伦", "华语流行音乐歌手"),
+            ("Taylor Swift", "English pop singer-songwriter"),
+        ]
+        for name, description in seed_artists:
+            cursor.execute("SELECT artist_id FROM Artists WHERE name = %s", (name,))
+            if not cursor.fetchone():
+                cursor.execute(
+                    "INSERT INTO Artists (name, description) VALUES (%s, %s)",
+                    (name, description),
+                )
+
+        cursor.execute("SELECT artist_id FROM Artists WHERE name = %s", ("周杰伦",))
+        jay_id = cursor.fetchone()[0]
+        cursor.execute("SELECT artist_id FROM Artists WHERE name = %s", ("Taylor Swift",))
+        taylor_id = cursor.fetchone()[0]
+
+        seed_albums = [
+            ("七里香", jay_id, 2004),
+            ("1989", taylor_id, 2014),
+        ]
+        for title, artist_id, release_year in seed_albums:
+            cursor.execute("SELECT album_id FROM Albums WHERE title = %s", (title,))
+            if not cursor.fetchone():
+                cursor.execute(
+                    "INSERT INTO Albums (title, artist_id, release_year) VALUES (%s, %s, %s)",
+                    (title, artist_id, release_year),
+                )
+
+        cursor.execute("SELECT album_id FROM Albums WHERE title = %s", ("七里香",))
+        qlxiang_album_id = cursor.fetchone()[0]
+        cursor.execute("SELECT album_id FROM Albums WHERE title = %s", ("1989",))
+        album_1989_id = cursor.fetchone()[0]
+
+        seed_songs = [
+            ("七里香", jay_id, qlxiang_album_id, 299),
+            ("搁浅", jay_id, qlxiang_album_id, 238),
+            ("Blank Space", taylor_id, album_1989_id, 231),
+        ]
+        for title, artist_id, album_id, duration_seconds in seed_songs:
+            cursor.execute(
+                """
+                SELECT song_id FROM Songs
+                WHERE title = %s AND artist_id = %s AND album_id = %s
+                """,
+                (title, artist_id, album_id),
+            )
+            if not cursor.fetchone():
+                cursor.execute(
+                    """
+                    INSERT INTO Songs (title, artist_id, album_id, duration_seconds)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (title, artist_id, album_id, duration_seconds),
+                )
+
+        cursor.execute("SELECT setval('users_user_id_seq', COALESCE((SELECT MAX(user_id) FROM Users), 1))")
+        cursor.execute("SELECT setval('artists_artist_id_seq', COALESCE((SELECT MAX(artist_id) FROM Artists), 1))")
+        cursor.execute("SELECT setval('albums_album_id_seq', COALESCE((SELECT MAX(album_id) FROM Albums), 1))")
+        cursor.execute("SELECT setval('songs_song_id_seq', COALESCE((SELECT MAX(song_id) FROM Songs), 1))")
+
+        conn.commit()
+        print("✅ 默认管理员与测试数据初始化完成！")
+        print(f"   默认管理员: {DEFAULT_ADMIN_USERNAME} / {DEFAULT_ADMIN_PASSWORD}")
+    except Error as e:
+        print(f"初始化默认数据时发生错误: {e}")
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
 
 
 if __name__ == "__main__":

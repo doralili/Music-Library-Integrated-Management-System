@@ -18,8 +18,244 @@ def get_avatar_src(avatar_path):
 from auth import auth, add_user
 from music_manager import MusicManager
 
-st.set_page_config(page_title="音乐库管理系统", page_icon="🎵", layout="wide")
+APP_NAME = "EchoBase"
+APP_FULL_NAME = "EchoBase 音乐社区与曲库管理系统"
+
+st.set_page_config(page_title=APP_FULL_NAME, page_icon="🎵", layout="wide")
 mm = MusicManager()
+
+def apply_theme():
+    st.markdown(
+        """
+        <style>
+        :root {
+            --echo-bg: #0b0f14;
+            --echo-panel: #121820;
+            --echo-panel-soft: #18212b;
+            --echo-card: #1b2430;
+            --echo-line: #2b3947;
+            --echo-text: #f5f7fb;
+            --echo-muted: #a7b1bd;
+            --echo-green: #1ed760;
+            --echo-blue: #52a8ff;
+            --echo-warm: #ffb86b;
+        }
+
+        .stApp {
+            color: var(--echo-text);
+            background:
+                radial-gradient(circle at 20% 0%, rgba(30, 215, 96, 0.18), transparent 28rem),
+                radial-gradient(circle at 84% 10%, rgba(82, 168, 255, 0.14), transparent 26rem),
+                linear-gradient(180deg, #111923 0%, #0b0f14 42%, #080b10 100%);
+        }
+
+        .block-container {
+            max-width: 1280px;
+            padding-top: 1.6rem;
+            padding-bottom: 3rem;
+        }
+
+        h1, h2, h3 {
+            letter-spacing: 0;
+            color: var(--echo-text);
+        }
+
+        h1 {
+            font-weight: 780;
+        }
+
+        div[data-testid="stSidebar"] {
+            background: #080b10;
+            border-right: 1px solid var(--echo-line);
+        }
+
+        div[data-testid="stSidebar"] * {
+            color: var(--echo-text) !important;
+        }
+
+        div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        div[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+            color: var(--echo-muted) !important;
+        }
+
+        div[data-testid="stTabs"] button {
+            border-radius: 999px;
+            color: var(--echo-muted);
+            font-weight: 650;
+            background: transparent;
+            padding: 0.45rem 0.9rem;
+        }
+
+        div[data-testid="stTabs"] button[aria-selected="true"] {
+            color: #08110c;
+            background: var(--echo-green);
+            border-bottom: 0;
+        }
+
+        div[data-testid="stTabs"] button[aria-selected="true"] * {
+            color: #08110c !important;
+        }
+
+        div[data-testid="stExpander"] {
+            border: 1px solid var(--echo-line);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(27, 36, 48, 0.96), rgba(18, 24, 32, 0.96));
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
+            overflow: hidden;
+        }
+
+        div[data-testid="stExpander"] summary,
+        div[data-testid="stExpander"] summary * {
+            color: var(--echo-text) !important;
+            font-weight: 680;
+        }
+
+        div[data-testid="stAlert"] {
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            background: rgba(27, 36, 48, 0.92);
+            color: var(--echo-text);
+        }
+
+        .stButton > button {
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: #222d3a;
+            color: var(--echo-text);
+            font-weight: 650;
+            transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+        }
+
+        .stButton > button:hover {
+            transform: translateY(-1px);
+            background: #2a3746;
+            border-color: rgba(30, 215, 96, 0.55);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        }
+
+        .stButton > button[kind="primary"] {
+            background: var(--echo-green);
+            color: #07130b;
+            border-color: var(--echo-green);
+        }
+
+        .stButton > button[kind="primary"] *,
+        .echo-brand * {
+            color: #07130b !important;
+        }
+
+        input, textarea, div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div {
+            border-radius: 10px !important;
+            background: #111821 !important;
+            color: var(--echo-text) !important;
+            border-color: var(--echo-line) !important;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: #7f8a96 !important;
+            opacity: 1 !important;
+        }
+
+        label, p, span, div[data-testid="stMarkdownContainer"] {
+            color: var(--echo-text);
+        }
+
+        div[data-testid="stCaptionContainer"],
+        .stMarkdown small {
+            color: var(--echo-muted);
+        }
+
+        [data-testid="stMetricValue"],
+        [data-testid="stMetricLabel"] {
+            color: var(--echo-text);
+        }
+
+        [data-testid="stMetric"] {
+            padding: 0.95rem 1rem;
+            border: 1px solid var(--echo-line);
+            border-radius: 12px;
+            background: rgba(27, 36, 48, 0.84);
+        }
+
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"] {
+            border: 1px solid var(--echo-line);
+            border-radius: 12px;
+            overflow: hidden;
+            background: var(--echo-panel);
+        }
+
+        [data-testid="stHeader"] {
+            background: rgba(8, 11, 16, 0.72);
+            backdrop-filter: blur(14px);
+        }
+
+        hr {
+            border-color: var(--echo-line);
+        }
+
+        .echo-hero {
+            position: relative;
+            padding: 4rem 3rem 3rem;
+            margin-bottom: 1.25rem;
+            border: 1px solid var(--echo-line);
+            border-radius: 18px;
+            background:
+                linear-gradient(135deg, rgba(30, 215, 96, 0.22), transparent 36%),
+                linear-gradient(225deg, rgba(82, 168, 255, 0.22), transparent 42%),
+                linear-gradient(180deg, #1b2430 0%, #111821 100%);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+            overflow: hidden;
+        }
+
+        .echo-title {
+            margin: 0;
+            max-width: 820px;
+            font-size: 3rem;
+            line-height: 1.12;
+            font-weight: 820;
+            color: var(--echo-text);
+        }
+
+        .echo-subtitle {
+            max-width: 650px;
+            margin: 0.9rem 0 0;
+            color: var(--echo-muted);
+            font-size: 1.05rem;
+        }
+
+        .echo-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.42rem 0.82rem;
+            margin-bottom: 1rem;
+            border-radius: 999px;
+            color: #08110c;
+            background: var(--echo-green);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-weight: 720;
+        }
+
+        .echo-hero::after {
+            content: "";
+            position: absolute;
+            right: 3rem;
+            bottom: -2.2rem;
+            width: 13rem;
+            height: 13rem;
+            border-radius: 50%;
+            border: 1.1rem solid rgba(245, 247, 251, 0.08);
+            box-shadow: inset 0 0 0 2.2rem rgba(245, 247, 251, 0.04);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+apply_theme()
 
 # ================= 状态同步 =================
 if 'current_user' in st.session_state:
@@ -46,7 +282,16 @@ def back_to_main():
 
 # 如果未登录
 if not auth.current_user:
-    st.markdown("<h1 style='text-align: center;'>🎵 openGauss 音乐库综合管理平台</h1>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <section class="echo-hero">
+            <div class="echo-brand">🎵 {APP_NAME}</div>
+            <h1 class="echo-title">{APP_FULL_NAME}</h1>
+            <p class="echo-subtitle">围绕歌曲、专辑、歌单和乐评建立的轻量音乐数据空间。</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
     st.write("---")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -204,7 +449,7 @@ else:
             st.rerun()
 
     # ====== 页面顶栏 ======
-    st.title("🎵 openGauss 音乐库综合管理平台")
+    st.title(f"🎵 {APP_FULL_NAME}")
 
     # ================= 路由：如果是查看任意用户的信息页 =================
     if st.session_state.view_user_id:
@@ -250,9 +495,13 @@ else:
                 
     # ================= 路由：正常的主标签页界面 =================
     else:
-        tab_playlist, tab_search, tab_forum, tab_mine, tab_music, tab_sys = st.tabs([
-            "🎧 收藏", "🔍 发现音乐", "💬 论坛", "👤 我的", "⚙️ 曲库管理 (管理员)", "🛡️ 账号安全 (超管)"
-        ])
+        if auth.current_user['role'] == 'listener':
+            tab_names = ["🎧 收藏", "🔍 发现音乐", "💬 论坛", "👤 我的", "", ""]
+        elif auth.current_user['role'] == 'sys_admin':
+            tab_names = ["", "", "💬 论坛管理", "", "⚙️ 曲库管理", "🛡️ 账号安全"]
+        else:
+            tab_names = ["", "", "💬 论坛管理", "", "⚙️ 曲库管理", ""]
+        tab_playlist, tab_search, tab_forum, tab_mine, tab_music, tab_sys = st.tabs(tab_names)
 
         # ----------------- Tab 1: 收藏 (我的歌单) -----------------
         with tab_playlist:
@@ -301,41 +550,6 @@ else:
                     st.warning("该歌单中暂时还没有歌曲哦。")
 
         # ----------------- Tab 2: 搜索 (发现音乐) -----------------
-            if auth.current_user['role'] in ('sys_admin', 'music_admin'):
-                st.divider()
-                st.subheader("管理员歌单删除")
-                all_playlists = mm.get_all_playlists()
-                if all_playlists:
-                    manage_opts = {
-                        f"{p[1]} (ID:{p[0]}) - {p[2]}": p[0]
-                        for p in all_playlists
-                    }
-                    target_playlist_name = st.selectbox(
-                        "选择任意歌单进行删除",
-                        options=list(manage_opts.keys()),
-                        key="admin_playlist_delete"
-                    )
-                    target_playlist_id = manage_opts[target_playlist_name]
-                    if st.button("删除所选歌单", key=f"admin_del_playlist_{target_playlist_id}"):
-                        if mm.delete_playlist(target_playlist_id):
-                            st.success("目标歌单已删除。")
-                            st.rerun()
-                        else:
-                            st.error("删除目标歌单失败。")
-
-                    admin_playlist_songs = mm.view_playlist(target_playlist_id)
-                    if admin_playlist_songs:
-                        st.caption("管理员可直接移除该歌单中的任意歌曲：")
-                        for row in admin_playlist_songs:
-                            s_id, s_name, s_art, s_alb, s_dur, s_aud, s_cov = row
-                            render_song_card(
-                                s_id, s_name, s_art, s_alb, s_dur,
-                                audio_url=s_aud, cover_url=s_cov,
-                                key_prefix=f"admin_pl_{target_playlist_id}_{s_id}",
-                                playlist_id=target_playlist_id
-                            )
-                else:
-                    st.info("当前系统中还没有可管理的歌单。")
 
         with tab_search:
             st.header("🔍 发现音乐 (搜索与榜单)")
@@ -450,18 +664,33 @@ else:
             if posts:
                 for row in posts:
                     pid, ptitle, pcontent, ptime, p_uid, p_uname, p_uavatar, s_id, s_title, a_name, al_title, s_cov, s_dur, s_aud = row
+                    can_delete_post = (
+                        auth.current_user['user_id'] == p_uid or
+                        auth.current_user['role'] in ('sys_admin', 'music_admin')
+                    )
                     ava = "👤"
                     if p_uavatar:
                         ava = "🖼️" if get_avatar_src(p_uavatar) else p_uavatar
                     
                     with st.expander(f"📄 {ptitle}  (✍️ {ava} {p_uname} 发布于 {ptime.strftime('%m-%d %H:%M')})"):
-                        fcol1, fcol2 = st.columns([5, 1])
+                        if can_delete_post:
+                            fcol1, fcol2, fcol3 = st.columns([5, 1, 1])
+                        else:
+                            fcol1, fcol2 = st.columns([5, 1])
                         with fcol1:
                             st.markdown(f"**📝 帖子内容:**\n\n{pcontent}")
                         with fcol2:
                             if st.button("此人主页", key=f"f_avatar_{pid}", use_container_width=True):
                                 go_to_user_profile(p_uid)
                                 st.rerun()
+                        if can_delete_post:
+                            with fcol3:
+                                if st.button("删除帖子", key=f"del_post_{pid}", use_container_width=True):
+                                    if mm.delete_post(pid):
+                                        st.success("帖子已删除。")
+                                        st.rerun()
+                                    else:
+                                        st.error("删除帖子失败。")
 
                         if s_id:
                             st.write("---")
@@ -474,7 +703,14 @@ else:
                         p_comments = mm.get_post_comments(pid)
                         if p_comments:
                             for pc_id, pc_uid, pc_uname, pc_uavatar, pc_content, pc_time in p_comments:
-                                scol1, scol2 = st.columns([5, 1])
+                                can_delete_post_comment = (
+                                    auth.current_user['user_id'] == pc_uid or
+                                    auth.current_user['role'] in ('sys_admin', 'music_admin')
+                                )
+                                if can_delete_post_comment:
+                                    scol1, scol2, scol3 = st.columns([5, 1, 1])
+                                else:
+                                    scol1, scol2 = st.columns([5, 1])
                                 with scol1:
                                     pc_uavatar_src = get_avatar_src(pc_uavatar)
                                     if pc_uavatar_src:
@@ -487,6 +723,14 @@ else:
                                     if st.button("看TA主页", key=f"go_upc_{pid}_{pc_id}"):
                                         go_to_user_profile(pc_uid)
                                         st.rerun()
+                                if can_delete_post_comment:
+                                    with scol3:
+                                        if st.button("删除回帖", key=f"del_pc_{pid}_{pc_id}"):
+                                            if mm.delete_post_comment(pc_id):
+                                                st.success("回帖已删除。")
+                                                st.rerun()
+                                            else:
+                                                st.error("删除回帖失败。")
                         else:
                             st.caption("还没有人回帖，快来这里各抒己见~")
                             
@@ -719,84 +963,53 @@ else:
             if auth.current_user['role'] != 'sys_admin':
                 st.error("⛔ 权限拦截：您目前的身份是普通用户或曲库网管，无权染指系统底层权限！")
             else:
-                st.subheader("🔐 系统管理员 - 账号维护中心")
+                st.warning("超级管理员确认访问。您可以通过此控制台查看并管理系统用户。")
 
-                # 1. 加载所有用户（用于判断剩余管理员数量）
-                try:
-                    conn = mm.create_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT username, role FROM Users ORDER BY username")
-                    user_list = cursor.fetchall()
-                    users = [{"username": row[0], "role": row[1]} for row in user_list]
-
-                    # 计算当前系统管理员数量
-                    admin_count = sum(1 for u in users if u["role"] == "sys_admin")
-                    conn.close()
-                except:
-                    users = [
-                        {"username": "admin", "role": "sys_admin"},
-                        {"username": "test_music_admin", "role": "music_admin"},
-                        {"username": "test_listener", "role": "listener"},
-                    ]
-                    admin_count = 1
-
-                # 显示用户列表
-                st.markdown("### 📋 所有用户列表")
-                import pandas as pd
-                df = pd.DataFrame(users)
-                st.dataframe(df, use_container_width=True)
-
-                # 2. 修改角色（只能改 listener / music_admin）
-                st.markdown("### ✏️ 搜索用户并修改角色")
-                col1, col2 = st.columns(2)
-                with col1:
-                    target_username = st.text_input("输入用户名", placeholder="输入要修改的用户名")
-                with col2:
-                    new_role = st.selectbox("设置角色", ["listener", "music_admin"])
-
-                if st.button("✅ 保存角色修改", type="primary"):
-                    if not target_username:
-                        st.warning("请输入用户名！")
-                    elif target_username in [u["username"] for u in users if u["role"] == "sys_admin"]:
-                        st.error("❌ 系统管理员不允许修改角色！")
+                st.subheader("➕ 新增系统用户")
+                ac1, ac2, ac3 = st.columns([2, 2, 1])
+                new_admin_username = ac1.text_input("用户名", key="admin_create_username")
+                new_admin_password = ac2.text_input("初始密码", type="password", key="admin_create_password")
+                new_admin_role = ac3.selectbox("角色", ["listener", "music_admin", "sys_admin"], key="admin_create_role")
+                if st.button("创建用户", key="btn_admin_create_user", type="primary"):
+                    ok, msg = mm.admin_create_user(new_admin_username.strip(), new_admin_password, new_admin_role)
+                    if ok:
+                        st.success(msg)
+                        st.rerun()
                     else:
-                        try:
-                            conn = mm.create_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("UPDATE Users SET role = %s WHERE username = %s", (new_role, target_username))
-                            conn.commit()
-                            conn.close()
-                            st.success(f"✅ 修改成功：{target_username} → {new_role}")
-                        except Exception as e:
-                            st.error(f"修改失败：{str(e)}")
+                        st.error(msg)
 
-                # 3. 删除用户（安全规则：至少保留1位系统管理员）
-                st.markdown("### 🗑️ 删除用户")
-                del_username = st.text_input("输入要删除的用户名", placeholder="输入用户名", key="del_user")
-                confirm_delete = st.checkbox("我确认要删除（不可恢复）", key="confirm_del")
+                st.divider()
+                st.subheader("👥 用户列表与权限管理")
+                fc1, fc2 = st.columns([2, 1])
+                user_keyword = fc1.text_input("按用户名搜索", key="admin_user_keyword")
+                role_filter = fc2.selectbox("按角色筛选", ["全部", "listener", "music_admin", "sys_admin"], key="admin_role_filter")
+                users = mm.get_all_users(user_keyword.strip(), role_filter)
+                if users:
+                    st.caption(f"共找到 {len(users)} 个用户")
+                    for uid, uname, urole, ubio, uavatar, ucreated in users:
+                        with st.expander(f"ID {uid} | {uname} | {urole} | {ucreated.strftime('%Y-%m-%d %H:%M')}"):
+                            st.write(f"**简介:** {ubio if ubio else '暂无'}")
+                            mc1, mc2 = st.columns([1, 1])
+                            selected_role = mc1.selectbox(
+                                "角色",
+                                ["listener", "music_admin", "sys_admin"],
+                                index=["listener", "music_admin", "sys_admin"].index(urole),
+                                key=f"user_role_{uid}",
+                            )
+                            if mc1.button("更新角色", key=f"btn_role_{uid}"):
+                                ok, msg = mm.admin_update_user_role(uid, selected_role)
+                                if ok:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
 
-                if st.button("❌ 确认删除用户", type="secondary"):
-                    if not del_username:
-                        st.warning("请输入要删除的用户名！")
-                    elif not confirm_delete:
-                        st.warning("请勾选确认删除！")
-                    else:
-                        # 获取要删除用户的角色
-                        is_deleting_admin = any(
-                            u["username"] == del_username and u["role"] == "sys_admin"
-                            for u in users
-                        )
-
-                        # 核心安全判断：不能删最后一个管理员
-                        if is_deleting_admin and admin_count <= 1:
-                            st.error("❌ 系统至少需要1位系统管理员，不允许删除！")
-                        else:
-                            try:
-                                conn = mm.create_connection()
-                                cursor = conn.cursor()
-                                cursor.execute("DELETE FROM Users WHERE username = %s", (del_username,))
-                                conn.commit()
-                                conn.close()
-                                st.success(f"✅ 已删除：{del_username}")
-                            except Exception as e:
-                                st.error(f"删除失败：{str(e)}")
+                            if mc2.button("删除用户", key=f"btn_delete_user_{uid}"):
+                                ok, msg = mm.admin_delete_user(uid)
+                                if ok:
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                else:
+                    st.info("没有找到匹配的用户。")

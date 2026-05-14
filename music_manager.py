@@ -1,7 +1,10 @@
 from datetime import datetime
+import logging
 
 from db_init import create_connection
 from auth import auth, add_user, hash_password  # 导入我们在上一步做好的权限管理器和新建用户函数
+
+logger = logging.getLogger(__name__)
 
 class MusicManager:
     """
@@ -76,6 +79,7 @@ class MusicManager:
             return results
         except Exception as e:
             print(f"搜索时发生错误: {e}")
+            logger.exception("Failed to search songs with keyword=%r", keyword)
             return []
         finally:
             if conn:
@@ -93,7 +97,9 @@ class MusicManager:
             cursor = conn.cursor()
             cursor.execute("SELECT artist_id, name FROM Artists ORDER BY name")
             return cursor.fetchall()
-        except: return []
+        except Exception:
+            logger.exception("Failed to fetch artists")
+            return []
         finally:
             if conn: conn.close()
 
@@ -104,7 +110,9 @@ class MusicManager:
             cursor = conn.cursor()
             cursor.execute("SELECT album_id, title FROM Albums ORDER BY title")
             return cursor.fetchall()
-        except: return []
+        except Exception:
+            logger.exception("Failed to fetch albums")
+            return []
         finally:
             if conn: conn.close()
 
@@ -122,7 +130,9 @@ class MusicManager:
             new_id = cursor.fetchone()[0]
             conn.commit()
             return new_id
-        except: return None
+        except Exception:
+            logger.exception("Failed to get or create artist: %s", artist_name)
+            return None
         finally:
             if conn: conn.close()
 
@@ -140,7 +150,9 @@ class MusicManager:
             new_id = cursor.fetchone()[0]
             conn.commit()
             return new_id
-        except: return None
+        except Exception:
+            logger.exception("Failed to get or create album: %s", album_title)
+            return None
         finally:
             if conn: conn.close()
 
@@ -159,6 +171,7 @@ class MusicManager:
             return new_id
         except Exception as e:
             print(f"❌ 添加歌曲失败: {e}")
+            logger.exception("Failed to add song title=%r artist_id=%s album_id=%s", title, artist_id, album_id)
             conn.rollback()
             return False
         finally:
@@ -188,6 +201,7 @@ class MusicManager:
                 return False
         except Exception as e:
             print(f"❌ 删除歌曲失败: {e}")
+            logger.exception("Failed to delete song_id=%s", song_id)
             conn.rollback()
             return False
         finally:
@@ -227,6 +241,7 @@ class MusicManager:
                 return False
         except Exception as e:
             print(f"❌ 修改歌曲失败: {e}")
+            logger.exception("Failed to update song_id=%s", song_id)
             conn.rollback()
             return False
         finally:
@@ -253,6 +268,7 @@ class MusicManager:
             return new_id
         except Exception as e:
             print(f"❌ 创建歌单失败: {e}")
+            logger.exception("Failed to create playlist name=%r", name)
             conn.rollback()
             return False
         finally:
@@ -282,6 +298,7 @@ class MusicManager:
             return results
         except Exception as e:
             print(f"❌ 获取歌单失败: {e}")
+            logger.exception("Failed to fetch playlists for current user")
             return []
         finally:
             if conn:
@@ -308,6 +325,7 @@ class MusicManager:
             return cursor.fetchone()
         except Exception as e:
             print(f"❌ 查询歌曲详情失败: {e}")
+            logger.exception("Failed to fetch song detail for song_id=%s", song_id)
             return None
         finally:
             if conn:
@@ -331,13 +349,14 @@ class MusicManager:
             return cursor.fetchall()
         except Exception as e:
             print(f"❌ 获取所有歌单失败: {e}")
+            logger.exception("Failed to fetch all playlists")
             return []
         finally:
             if conn:
                 cursor.close()
                 conn.close()
 
-    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    @auth.require_role('listener')
     def delete_playlist(self, playlist_id):
         """删除歌单。普通用户只能删自己的，管理员可删任意歌单"""
         conn = create_connection()
@@ -352,8 +371,7 @@ class MusicManager:
 
             creator_id, playlist_name = playlist
             current_user = auth.current_user
-            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
-            if not can_manage_all and creator_id != current_user['user_id']:
+            if creator_id != current_user['user_id']:
                 print("❌ 操作拒绝：你只能删除自己的歌单！")
                 return False
 
@@ -363,6 +381,7 @@ class MusicManager:
             return True
         except Exception as e:
             print(f"❌ 删除歌单失败: {e}")
+            logger.exception("Failed to delete playlist_id=%s", playlist_id)
             conn.rollback()
             return False
         finally:
@@ -392,6 +411,7 @@ class MusicManager:
             return True
         except Exception as e:
             print(f"❌ 添加歌曲到歌单失败(可能已经在这个歌单里了): {e}")
+            logger.exception("Failed to add song_id=%s to playlist_id=%s", song_id, playlist_id)
             conn.rollback()
             return False
         finally:
@@ -439,6 +459,7 @@ class MusicManager:
             return results
         except Exception as e:
             print(f"❌ 查看歌单失败: {e}")
+            logger.exception("Failed to view playlist_id=%s", playlist_id)
             return []
         finally:
             if conn:
@@ -464,6 +485,7 @@ class MusicManager:
             return results
         except Exception as e:
             print(f"❌ 获取评论失败: {e}")
+            logger.exception("Failed to fetch comments for song_id=%s", song_id)
             return []
         finally:
             if conn:
@@ -486,6 +508,7 @@ class MusicManager:
             return new_id
         except Exception as e:
             print(f"❌ 发布评论失败: {e}")
+            logger.exception("Failed to add comment for song_id=%s", song_id)
             conn.rollback()
             return False
         finally:
@@ -507,8 +530,7 @@ class MusicManager:
 
             creator_id, playlist_name = playlist
             current_user = auth.current_user
-            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
-            if not can_manage_all and creator_id != current_user['user_id']:
+            if creator_id != current_user['user_id']:
                 return False, "你只能删除自己歌单里的歌曲。"
 
             cursor.execute(
@@ -523,6 +545,7 @@ class MusicManager:
             conn.commit()
             return True, f"已从歌单《{playlist_name}》中移除该歌曲。"
         except Exception as e:
+            logger.exception("Failed to remove song_id=%s from playlist_id=%s", song_id, playlist_id)
             conn.rollback()
             return False, f"删除歌单歌曲失败: {e}"
         finally:
@@ -551,15 +574,74 @@ class MusicManager:
                 return False
 
             cursor.execute("DELETE FROM Comments WHERE comment_id = %s", (comment_id,))
-            cursor.execute(
-                "UPDATE Songs SET comment_count = GREATEST(comment_count - 1, 0) WHERE song_id = %s",
-                (song_id,)
-            )
             conn.commit()
             print(f"✅ 成功删除评论 ID={comment_id}")
             return True
         except Exception as e:
             print(f"❌ 删除评论失败: {e}")
+            logger.exception("Failed to delete comment_id=%s", comment_id)
+            conn.rollback()
+            return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    def delete_post(self, post_id):
+        """删除论坛帖子。听众只能删除自己的帖子，管理员可删除任意帖子。"""
+        conn = create_connection()
+        if not conn: return False
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id, title FROM Posts WHERE post_id = %s", (post_id,))
+            post = cursor.fetchone()
+            if not post:
+                return False
+
+            post_user_id, post_title = post
+            current_user = auth.current_user
+            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
+            if not can_manage_all and post_user_id != current_user['user_id']:
+                return False
+
+            cursor.execute("DELETE FROM Posts WHERE post_id = %s", (post_id,))
+            conn.commit()
+            print(f"✅ 成功删除帖子 '{post_title}' (ID: {post_id})")
+            return True
+        except Exception as e:
+            logger.exception("Failed to delete post_id=%s", post_id)
+            conn.rollback()
+            return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    def delete_post_comment(self, pcomment_id):
+        """删除论坛评论。听众只能删除自己的评论，管理员可删除任意评论。"""
+        conn = create_connection()
+        if not conn: return False
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id FROM Post_Comments WHERE pcomment_id = %s", (pcomment_id,))
+            comment = cursor.fetchone()
+            if not comment:
+                return False
+
+            comment_user_id = comment[0]
+            current_user = auth.current_user
+            can_manage_all = current_user['role'] in ('sys_admin', 'music_admin')
+            if not can_manage_all and comment_user_id != current_user['user_id']:
+                return False
+
+            cursor.execute("DELETE FROM Post_Comments WHERE pcomment_id = %s", (pcomment_id,))
+            conn.commit()
+            print(f"✅ 成功删除论坛评论 ID={pcomment_id}")
+            return True
+        except Exception as e:
+            logger.exception("Failed to delete post comment pcomment_id=%s", pcomment_id)
             conn.rollback()
             return False
         finally:
@@ -607,6 +689,7 @@ class MusicManager:
             return action
         except Exception as e:
             print(f"❌ 点赞操作失败: {e}")
+            logger.exception("Failed to toggle like for song_id=%s", song_id)
             conn.rollback()
             return False
         finally:
@@ -630,6 +713,7 @@ class MusicManager:
             cursor.execute(sql, (user_id, song_id))
             return cursor.fetchone() is not None
         except Exception as e:
+            logger.exception("Failed to check liked state for song_id=%s", song_id)
             return False
         finally:
             if conn:
@@ -680,6 +764,7 @@ class MusicManager:
             return likes_ranking, comments_ranking
         except Exception as e:
             print(f"❌ 获取排行榜失败: {e}")
+            logger.exception("Failed to fetch rankings")
             return [], []
         finally:
             if conn:
@@ -689,7 +774,7 @@ class MusicManager:
     # ==========================================
     # 论坛与帖子系统
     # ==========================================
-    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    @auth.require_role('listener')
     def create_post(self, title, content, recommended_song_id=None):
         """发布新帖子"""
         conn = create_connection()
@@ -703,6 +788,11 @@ class MusicManager:
             conn.commit()
             return new_id
         except Exception as e:
+            logger.exception(
+                "Failed to create post for user_id=%s with recommended_song_id=%s",
+                auth.current_user.get('user_id') if auth.current_user else None,
+                recommended_song_id,
+            )
             conn.rollback()
             return False
         finally:
@@ -724,6 +814,7 @@ class MusicManager:
             cursor.execute(sql, (limit, offset))
             return cursor.fetchall()
         except Exception as e:
+            logger.exception("Failed to fetch posts with limit=%s offset=%s", limit, offset)
             return []
         finally:
             if conn:
@@ -745,6 +836,7 @@ class MusicManager:
             cursor.execute(sql, (target_user_id,))
             return cursor.fetchall()
         except Exception as e:
+            logger.exception("Failed to fetch posts for user_id=%s", target_user_id)
             return []
         finally:
             if conn:
@@ -768,13 +860,14 @@ class MusicManager:
             cursor.execute(sql, (post_id,))
             return cursor.fetchall()
         except Exception as e:
+            logger.exception("Failed to fetch comments for post_id=%s", post_id)
             return []
         finally:
             if conn:
                 cursor.close()
                 conn.close()
 
-    @auth.require_role('listener', 'music_admin', 'sys_admin')
+    @auth.require_role('listener')
     def add_post_comment(self, post_id, content):
         """给帖子留言"""
         conn = create_connection()
@@ -787,6 +880,11 @@ class MusicManager:
             conn.commit()
             return True
         except Exception as e:
+            logger.exception(
+                "Failed to add comment to post_id=%s for user_id=%s",
+                post_id,
+                auth.current_user.get('user_id') if auth.current_user else None,
+            )
             conn.rollback()
             return False
         finally:
@@ -807,6 +905,7 @@ class MusicManager:
             cursor.execute(sql, (user_id,))
             return cursor.fetchone()
         except Exception as e:
+            logger.exception("Failed to fetch user info for user_id=%s", user_id)
             return None
         finally:
             if conn:
@@ -827,6 +926,7 @@ class MusicManager:
             return True
         except Exception as e:
             # 如果用户名重复会有错误抛出
+            logger.exception("Failed to update profile for user_id=%s", auth.current_user.get('user_id') if auth.current_user else None)
             conn.rollback()
             return False
         finally:
@@ -856,6 +956,7 @@ class MusicManager:
             return cursor.fetchall()
         except Exception as e:
             print(f"❌ 获取用户列表失败: {e}")
+            logger.exception("Failed to fetch users with keyword=%r role_filter=%r", keyword, role_filter)
             return []
         finally:
             if conn:
@@ -878,6 +979,7 @@ class MusicManager:
             conn.commit()
             return True, f"账号 {deleted[0]} 已注销。"
         except Exception as e:
+            logger.exception("Failed to delete current user_id=%s", auth.current_user.get('user_id') if auth.current_user else None)
             conn.rollback()
             return False, f"注销账号失败: {e}"
         finally:
@@ -905,6 +1007,7 @@ class MusicManager:
             conn.commit()
             return True, f"已创建用户 {username} (ID: {new_user_id})。"
         except Exception as e:
+            logger.exception("Failed to create user %r with role=%s", username, role)
             conn.rollback()
             return False, f"创建用户失败，可能是用户名已存在: {e}"
         finally:
@@ -930,36 +1033,9 @@ class MusicManager:
             conn.commit()
             return True, f"用户 {updated[0]} 的角色已更新为 {new_role}。"
         except Exception as e:
+            logger.exception("Failed to update user_id=%s role to %s", user_id, new_role)
             conn.rollback()
             return False, f"修改角色失败: {e}"
-        finally:
-            if conn:
-                cursor.close()
-                conn.close()
-
-    @auth.require_role('sys_admin')
-    def admin_reset_password(self, user_id, new_password):
-        """系统管理员重置指定用户密码。"""
-        if not new_password:
-            return False, "新密码不能为空。"
-
-        conn = create_connection()
-        if not conn: return False, "数据库连接失败。"
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE Users SET password_hash = %s WHERE user_id = %s RETURNING username",
-                (hash_password(new_password), user_id)
-            )
-            updated = cursor.fetchone()
-            if not updated:
-                conn.rollback()
-                return False, "找不到该用户。"
-            conn.commit()
-            return True, f"用户 {updated[0]} 的密码已重置。"
-        except Exception as e:
-            conn.rollback()
-            return False, f"重置密码失败: {e}"
         finally:
             if conn:
                 cursor.close()
@@ -983,6 +1059,7 @@ class MusicManager:
             conn.commit()
             return True, f"用户 {deleted[0]} 已删除。"
         except Exception as e:
+            logger.exception("Failed to delete user_id=%s", user_id)
             conn.rollback()
             return False, f"删除用户失败: {e}"
         finally:
@@ -1021,6 +1098,7 @@ class MusicManager:
             print("\n✅ 测试用例环境检查完毕：测试歌曲已就绪！")
         except Exception as e:
             print(f"\n插入数据失败(可能是ID冲突无需重复插入): {e}")
+            logger.exception("Failed to insert test data")
         finally:
             if conn:
                 cursor.close()
@@ -1044,7 +1122,8 @@ if __name__ == "__main__":
     # 创建个临时音乐管理员并登录（仅供测试演示，绕过权限校验）
     try:
         add_user.__wrapped__("test_music_admin", "123", "music_admin")
-    except Exception:
+    except Exception as e:
+        logger.info("Skipped creating test_music_admin, likely already exists: %s", e)
         pass # 可能已存在
     auth.login("test_music_admin", "123")
     
@@ -1074,7 +1153,8 @@ if __name__ == "__main__":
     print("\n=== 阶段C：以下是 歌单(多对多关联+聚合统计) 操作测试 ===")
     try:
         add_user.__wrapped__("test_listener", "123", "listener")
-    except Exception:
+    except Exception as e:
+        logger.info("Skipped creating test_listener, likely already exists: %s", e)
         pass
     auth.login("test_listener", "123")
     
