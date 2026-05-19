@@ -328,6 +328,7 @@ if not auth.current_user:
 
 else:
     # ====== 已登录：定义渲染歌曲卡片的组件 ======
+       
     def render_song_card(song_id, song_name, artist, album, duration, audio_url=None, cover_url=None, count_info="", key_prefix="search", playlist_id=None):
         title_text = f"{count_info}🎵 {song_name} - {artist} (专辑: {album})" if count_info else f"🎵 {song_name} - {artist} (专辑: {album})"
         with st.expander(title_text):
@@ -344,8 +345,10 @@ else:
                 btn_text = "💔 取消喜欢" if liked else "❤️ 喜欢此歌曲"
                 if st.button(btn_text, key=f"like_btn_{key_prefix}_{song_id}", use_container_width=True):
                     action = mm.toggle_like_song(song_id)
-                    if action == "liked": st.toast("已自动加入歌单【我喜欢的歌曲】！", icon="❤️")
-                    else: st.toast("已从【我喜欢的歌曲】中移出。", icon="💔")
+                    if action == "liked":
+                        st.toast("已自动加入歌单【我喜欢的歌曲】！", icon="❤️")
+                    else:
+                        st.toast("已从【我喜欢的歌曲】中移出。", icon="💔")
                     st.rerun()
             if playlist_id is not None:
                 with scol3:
@@ -356,76 +359,79 @@ else:
                             st.rerun()
                         else:
                             st.error(msg)
-                     
+            
             st.divider()
-            
-            # --- 添加到歌单功能 ---
-            st.write("##### 📁 把这首歌加入歌单")
-            my_playlists = mm.get_my_playlists()
-            if my_playlists:
-                # 把元组列表转成 选项名称 -> ID 的字典
-                pl_opts = {f"{p[1]} (ID:{p[0]})": p[0] for p in my_playlists}
-                
-                pl_col1, pl_col2 = st.columns([3, 1])
-                with pl_col1:
-                    selected_pl = st.selectbox("选择目标歌单", options=list(pl_opts.keys()), key=f"sel_pl_{key_prefix}_{song_id}", label_visibility="collapsed")
-                with pl_col2:
-                    if st.button("📥 加入", key=f"btn_pl_{key_prefix}_{song_id}", use_container_width=True):
-                        target_id = pl_opts[selected_pl]
-                        if mm.add_to_playlist(target_id, song_id):
-                            st.toast(f"成功将《{song_name}》加入到歌单", icon="✅")
-            else:
-                st.caption("您还没有创建任何歌单，先去【🎧 收藏】里新建一个吧！")
-                
-            st.divider()
-            st.write("##### 💬 歌曲评论区")
-            
-            col_c1, col_c2 = st.columns([1, 1])
-            with col_c1:
-                new_comment = st.text_area(f"写下你对《{song_name}》的评论...", height=100, key=f"cmt_text_{key_prefix}_{song_id}")
-                if st.button("🚀 发送评论", key=f"cmt_btn_{key_prefix}_{song_id}"):
-                    if new_comment.strip():
-                        if mm.add_comment(song_id, new_comment):
-                            st.success("评论发布成功！")
-                            st.rerun()
-                    else: st.warning("评论内容不能为空！")
-            
-            with col_c2:
-                comments = mm.get_comments(song_id)
-                if comments:
-                    st.caption(f"共 {len(comments)} 条评论:")
-                    for c_id, c_uid, c_user, c_avatar, c_content, c_time in comments:
-                        can_delete_comment = (
-                            auth.current_user['user_id'] == c_uid or
-                            auth.current_user['role'] in ('sys_admin', 'music_admin')
-                        )
-                        if can_delete_comment:
-                            cn1, cn2, cn3 = st.columns([3, 1, 1])
-                        else:
-                            cn1, cn2 = st.columns([3, 1])
-                        with cn1:
-                            c_avatar_src = get_avatar_src(c_avatar)
-                            if c_avatar_src:
-                                st.markdown(f"<img src='{c_avatar_src}' style='width:30px; height:30px; border-radius:50%; vertical-align:middle; margin-right:10px;'> **{c_user}**  ·  _{c_time.strftime('%Y-%m-%d %H:%M')}_", unsafe_allow_html=True)
-                            else:
-                                ava_disp = c_avatar if c_avatar else "👤"
-                                st.markdown(f"**{ava_disp} {c_user}**  ·  _{c_time.strftime('%Y-%m-%d %H:%M')}_")
-                        with cn2:
-                            if st.button("看TA主页", key=f"go_u_{key_prefix}_{song_id}_{c_id}"):
-                                go_to_user_profile(c_uid)
-                                st.rerun()
-                        if can_delete_comment:
-                            with cn3:
-                                if st.button("删除评论", key=f"del_cmt_{key_prefix}_{song_id}_{c_id}"):
-                                    if mm.delete_comment(c_id):
-                                        st.success("评论已删除。")
-                                        st.rerun()
-                                    else:
-                                        st.error("删除评论失败。")
-                        st.info(c_content)
-                else:
-                    st.info("还没有人对这首歌发表评论，快来抢沙发吧🛋️！")
 
+            # ====================== 标签页切换：加入歌单 / 评论区 ======================
+            tab_pl, tab_cmt = st.tabs(["📁 加入歌单", "💬 歌曲评论"])
+
+            # 标签1：加入歌单
+            with tab_pl:
+                st.write("##### 📁 把这首歌加入歌单")
+                my_playlists = mm.get_my_playlists()
+                if my_playlists:
+                    pl_opts = {f"{p[1]} (ID:{p[0]})": p[0] for p in my_playlists}
+                    pl_col1, pl_col2 = st.columns([3, 1])
+                    with pl_col1:
+                        selected_pl = st.selectbox("选择目标歌单", options=list(pl_opts.keys()), key=f"sel_pl_{key_prefix}_{song_id}", label_visibility="collapsed")
+                    with pl_col2:
+                        if st.button("📥 加入", key=f"btn_pl_{key_prefix}_{song_id}", use_container_width=True):
+                            target_id = pl_opts[selected_pl]
+                            if mm.add_to_playlist(target_id, song_id):
+                                st.toast(f"成功将《{song_name}》加入到歌单", icon="✅")
+                                st.rerun()
+                else:
+                    st.caption("您还没有创建任何歌单，先去【🎧 收藏】里新建一个吧！")
+
+            # 标签2：评论区
+            with tab_cmt:
+                st.write("##### 💬 歌曲评论区")
+                col_c1, col_c2 = st.columns([1, 1])
+                with col_c1:
+                    new_comment = st.text_area(f"写下你对《{song_name}》的评论...", height=100, key=f"cmt_text_{key_prefix}_{song_id}")
+                    if st.button("🚀 发送评论", key=f"cmt_btn_{key_prefix}_{song_id}"):
+                        if new_comment.strip():
+                            if mm.add_comment(song_id, new_comment):
+                                st.success("评论发布成功！")
+                                st.rerun()
+                        else:
+                            st.warning("评论内容不能为空！")
+                
+                with col_c2:
+                    comments = mm.get_comments(song_id)
+                    if comments:
+                        st.caption(f"共 {len(comments)} 条评论:")
+                        for c_id, c_uid, c_user, c_avatar, c_content, c_time in comments:
+                            can_delete_comment = (
+                                auth.current_user['user_id'] == c_uid or
+                                auth.current_user['role'] in ('sys_admin', 'music_admin')
+                            )
+                            if can_delete_comment:
+                                cn1, cn2, cn3 = st.columns([3, 1, 1])
+                            else:
+                                cn1, cn2 = st.columns([3, 1])
+                            with cn1:
+                                c_avatar_src = get_avatar_src(c_avatar)
+                                if c_avatar_src:
+                                    st.markdown(f"<img src='{c_avatar_src}' style='width:30px; height:30px; border-radius:50%; vertical-align:middle; margin-right:10px;'> **{c_user}**  ·  _{c_time.strftime('%Y-%m-%d %H:%M')}_", unsafe_allow_html=True)
+                                else:
+                                    ava_disp = c_avatar if c_avatar else "👤"
+                                    st.markdown(f"**{ava_disp} {c_user}**  ·  _{c_time.strftime('%Y-%m-%d %H:%M')}_")
+                            with cn2:
+                                if st.button("看TA主页", key=f"go_u_{key_prefix}_{song_id}_{c_id}"):
+                                    go_to_user_profile(c_uid)
+                                    st.rerun()
+                            if can_delete_comment:
+                                with cn3:
+                                    if st.button("删除评论", key=f"del_cmt_{key_prefix}_{song_id}_{c_id}"):
+                                        if mm.delete_comment(c_id):
+                                            st.success("评论已删除。")
+                                            st.rerun()
+                                        else:
+                                            st.error("删除评论失败。")
+                            st.info(c_content)
+                    else:
+                        st.info("还没有人对这首歌发表评论，快来抢沙发吧🛋️！")
     # ====== 侧边栏 ======
     with st.sidebar:
         # 获取当前用户实时信息
@@ -529,10 +535,12 @@ else:
                 st.write(f"#### 💿 正在查看: {view_pl_name}")
                 if st.button("删除当前歌单", key=f"del_my_playlist_{view_pl_id}"):
                     if mm.delete_playlist(view_pl_id):
-                        st.success("歌单已删除。")
+                        st.success("歌单已成功删除!")
+        # 关键：删除成功后，立刻清空view_pl_id，避免后续渲染错误信息
+                        st.session_state.view_pl_id = None
                         st.rerun()
                     else:
-                        st.error("删除歌单失败。")
+                        st.error("删除歌单失败")
                 songs = mm.view_playlist(view_pl_id)
                 if songs:
                     for row in songs:
@@ -828,135 +836,100 @@ else:
                     st.info("你还没有在论坛发布过任何帖子哦，快去【论坛】水一贴吧！")
 
         # ----------------- Tab 5: 曲库管理 -----------------
+                
         with tab_music:
             st.header("⚙️ 音乐曲库资源管理")
             if auth.current_user['role'] not in ('sys_admin', 'music_admin'):
-                st.error("⛔ 权限拒绝：本页面属于后台系统，仅限【音乐管理员 / 系统管理员】访问。")
+                st.error("⛔ 权限不足，仅系统管理员/曲库管理员可访问")
             else:
-                st.info("身份核划通过，您可以对系统全库歌曲进行增加、修改和删除操作。")
-                with st.expander("➕ 增加新歌曲", expanded=True):
+                st.info("✅ 权限验证通过，可管理全库歌曲")
+
+                # ==================== 增加新歌曲 ====================
+                with st.expander("➕ 单独添加新歌曲", expanded=True):
+                    # 第1行：歌曲名称 | 专辑名称
                     c1, c2 = st.columns(2)
                     n_title = c1.text_input("歌曲名称 *")
-                    n_duration = c2.number_input("时长(秒)", min_value=1, step=1)
-                    
-                    # 动态获取已有的歌手和专辑
-                    all_artists = mm.get_all_artists() # [(id, name)]
-                    all_albums = mm.get_all_albums()   # [(id, title)]
-                    
-                    artist_names = [a[1] for a in all_artists]
-                    album_titles = [a[1] for a in all_albums]
+                    album_name = c2.text_input("专辑名称 *")
 
-                    art_mode = c1.radio("歌手录入方式", ["☑️ 选择已有", "➕ 临时新建"], horizontal=True)
-                    if art_mode == "☑️ 选择已有":
-                        final_artist_name = c1.selectbox("下拉选择库内歌手", artist_names)
+                    # 第2行：歌手名称 | 歌曲曲风（同一行并排）
+                    c3, c4 = st.columns(2)
+                    artist_name = c3.text_input("歌手名称 *")
+                    genre = c4.text_input("歌曲曲风", placeholder="例如：流行、古风、摇滚")
+
+                    # 音频来源
+                    audio_mode = st.radio("音频来源", ["在线URL", "本地上传MP3"], horizontal=True)
+                    final_url = None
+                    auto_dur = None
+
+                    if audio_mode == "在线URL":
+                        final_url = st.text_input("音频URL")
                     else:
-                        final_artist_name = c1.text_input("请输入新歌手全名 *", key="new_artist_input")
+                        up = st.file_uploader("上传MP3", type=["mp3"])
+                        if up:
+                            import os, uuid
+                            os.makedirs("audios", exist_ok=True)
+                            fn = f"audios/{uuid.uuid4()}.mp3"
+                            with open(fn, "wb") as f:
+                                f.write(up.getvalue())
+                            final_url = fn
 
-                    alb_mode = c2.radio("专辑录入方式", ["☑️ 选择已有", "➕ 临时新建"], horizontal=True)
-                    if alb_mode == "☑️ 选择已有":
-                        final_album_name = c2.selectbox("下拉选择库内专辑", album_titles)
-                    else:
-                        final_album_name = c2.text_input("请输入新专辑全称 *", key="new_album_input")
+                            try:
+                                from mutagen.mp3 import MP3
+                                import io
+                                audio = MP3(io.BytesIO(up.getvalue()))
+                                auto_dur = int(audio.info.length)
+                                st.success(f"✅ 时长识别：{auto_dur} 秒")
+                            except:
+                                auto_dur = 1
+                                st.warning("⚠️ 无法识别时长，使用默认1秒")
 
-                    st.markdown("---")
-                    audio_mode = st.radio("音源提供方式 (可选)", ["🌐 输入URL", "📁 上传本地音频(MP3)"], horizontal=True)
-                    if audio_mode == "🌐 输入URL":
-                        n_audio_file = None
-                        n_audio = st.text_input("输入免费在线歌曲外链 (audio_url)")
-                    else:
-                        n_audio = ""
-                        n_audio_file = st.file_uploader("从电脑中选取 MP3 音频文件", type=['mp3', 'wav', 'ogg'])
-
-                    if st.button("🚀 录入数据库", type="primary"):
-                        if n_title and final_artist_name and final_album_name:
-                            # 根据文本找到或自动创建ID
-                            n_art_id = mm.get_or_create_artist(final_artist_name)
-                            n_alb_id = mm.get_or_create_album(final_album_name)
-
-                            final_audio = n_audio if n_audio else None
-                            # 1. 如果用户选择了本地上传，处理保存逻辑并生成新路径
-                            if audio_mode.startswith("📁") and n_audio_file is not None:
-                                import uuid
-                                if not os.path.exists("audios"):
-                                    os.makedirs("audios")
-                                ext = n_audio_file.name.split('.')[-1]
-                                audio_path = f"audios/song_{uuid.uuid4().hex[:8]}.{ext}"
-                                with open(audio_path, "wb") as f:
-                                    f.write(n_audio_file.getbuffer())
-                                final_audio = audio_path
-
-                            # 2. 写入数据库
-                            if mm.add_song(n_title, n_art_id, n_alb_id, n_duration, audio_url=final_audio): 
-                                st.success(f"歌曲入库成功！已绑定歌手 '{final_artist_name}' 及专辑 '{final_album_name}'")
-                                st.balloons()
+                    if st.button("✅ 确认添加歌曲", type="primary", use_container_width=True):
+                        if not n_title or not artist_name or not album_name or not final_url:
+                            st.error("请填写必填项")
+                        else:
+                            aid = mm.get_or_create_artist(artist_name)
+                            alid = mm.get_or_create_album(album_name)
+                            sid = mm.add_song(n_title, aid, alid, auto_dur if auto_dur else 1, final_url)
+                            if sid:
+                                st.success("添加成功！")
                                 st.rerun()
-                        else: st.error("歌名、歌手和专辑都不能为空！")
+
+                # ==================== 修改歌曲信息 ====================
                 with st.expander("✏️ 修改歌曲信息"):
-                    update_song_kw = st.text_input("输入歌曲名称关键字检索", key="update_song_keyword")
-                    song_search_results = mm.search_songs(update_song_kw.strip()) if update_song_kw.strip() else []
-                    selected_song_id = None
-                    if update_song_kw.strip():
-                        if song_search_results:
-                            song_opts = {
-                                f"{row[1]} - {row[2] or '未知歌手'} (ID:{row[0]})": row[0]
-                                for row in song_search_results
-                            }
-                            selected_song_label = st.selectbox(
-                                "选择要修改的歌曲",
-                                options=list(song_opts.keys()),
-                                key="update_song_select"
-                            )
-                            selected_song_id = song_opts[selected_song_label]
-                        else:
-                            st.warning("没有找到匹配的歌曲，请换个关键词。")
+                    kw = st.text_input("输入歌曲名称搜索")
+                    sid = None
+                    if kw:
+                        res = mm.search_songs(kw)
+                        if res:
+                            opt = {f"{r[1]} - {r[2]}": r[0] for r in res}
+                            sel = st.selectbox("选择歌曲", opt.keys())
+                            sid = opt[sel]
 
-                    song_detail = mm.get_song_detail(selected_song_id) if selected_song_id else None
-                    if song_detail:
-                        (
-                            song_id, old_title, old_artist_id, old_artist_name,
-                            old_album_id, old_album_title, old_duration, old_audio_url
-                        ) = song_detail
-                        st.caption(
-                            f"当前：{old_title} / {old_artist_name or '未知歌手'} / "
-                            f"{old_album_title or '未归档专辑'} / {old_duration or 0} 秒"
-                        )
-                    else:
-                        st.info("请先按歌曲名称检索并选择要修改的歌曲。")
+                    if sid:
+                        d = mm.get_song_detail(sid)
+                        st.caption(f"当前：{d[1]} / {d[4]} / {d[6]}秒")
+                        c1,c2 = st.columns(2)
+                        nt = c1.text_input("新标题")
+                        na = c1.text_input("新歌手")
+                        nal = c2.text_input("新专辑")
+                        nd = c2.number_input("新时长(秒)", min_value=0)
+                        nu = st.text_input("新音频地址")
 
-                    uc1, uc2 = st.columns(2)
-                    new_title = uc1.text_input("新歌曲名称（留空则不改）", key="update_song_title")
-                    new_duration_raw = uc2.number_input("新时长秒数（0 表示不改）", min_value=0, step=1, key="update_song_duration")
-                    new_artist_name = uc1.text_input("新歌手名称（留空则不改）", key="update_song_artist")
-                    new_album_name = uc2.text_input("新专辑名称（留空则不改）", key="update_song_album")
-                    new_audio_url = st.text_input("新音频 URL（留空则不改）", key="update_song_audio")
-
-                    if st.button("保存歌曲修改", key="btn_update_song", type="primary"):
-                        if not selected_song_id:
-                            st.error("请先选择要修改的歌曲。")
-                        else:
-                            new_artist_id = mm.get_or_create_artist(new_artist_name) if new_artist_name.strip() else None
-                            new_album_id = mm.get_or_create_album(new_album_name) if new_album_name.strip() else None
-                            ok = mm.update_song(
-                                selected_song_id,
-                                new_title=new_title.strip() or None,
-                                new_artist_id=new_artist_id,
-                                new_album_id=new_album_id,
-                                new_duration=new_duration_raw if new_duration_raw > 0 else None,
-                                new_audio_url=new_audio_url.strip() or None,
-                            )
+                        if st.button("保存修改"):
+                            naid = mm.get_or_create_artist(na) if na else None
+                            nalid = mm.get_or_create_album(nal) if nal else None
+                            ok = mm.update_song(sid, nt or None, naid, nalid, nd if nd>0 else None, nu or None)
                             if ok:
-                                st.success("歌曲信息修正成功！")
+                                st.success("修改成功")
                                 st.rerun()
-                            else:
-                                st.error("修改失败，请确认所选歌曲是否仍然存在。")
 
-                with st.expander("🗑️ 删除违规歌曲"):
-                    st.warning("高危操作：从曲库中永久删除歌曲，包含级联删除。")
-                    d_id = st.number_input("输入要销毁的【歌曲 ID】", min_value=1, step=1)
-                    if st.button("🔥 彻底删除它"):
-                        if mm.delete_song(d_id): st.success("已抹除！")
-                        else: st.error("找不到此歌。")
-
+                # ==================== 删除歌曲 ====================
+                with st.expander("🗑️ 删除歌曲"):
+                    did = st.number_input("输入歌曲ID", min_value=1)
+                    if st.button("🔥 彻底删除"):
+                        if mm.delete_song(did):
+                            st.success("删除成功")
+                            st.rerun()
         # ----------------- Tab 6: 账号安全 -----------------
         with tab_sys:
             st.header("🛡️ 系统安全及角色权限分发")

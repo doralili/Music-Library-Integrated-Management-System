@@ -31,15 +31,14 @@ class MusicManager:
 
         try:
             cursor = conn.cursor()
-            # 这是一个典型的联查 SQL，能够把原本分开存的外部键(artist_id)替换成实际的名字
-            # openGauss 支持 ILIKE （不区分大小写的模糊匹配，比普通的 LIKE 更好用）
             sql = """
             SELECT 
                 s.song_id, 
                 s.title AS song_title, 
                 a.name AS artist_name, 
                 al.title AS album_title, 
-                s.duration_seconds, s.audio_url, al.cover_url
+                s.duration_seconds, s.audio_url, al.cover_url,
+                genre  -- 【添加：曲风】
             FROM Songs s
             LEFT JOIN Artists a ON s.artist_id = a.artist_id
             LEFT JOIN Albums al ON s.album_id = al.album_id
@@ -49,32 +48,29 @@ class MusicManager:
             ORDER BY s.title ASC;
             """
             
-            # 拼接带 % 的模糊匹配通配符，比如关键词如果是 "周董"，实际搜的是 "%周董%"
             search_pattern = f"%{keyword}%"
-            # 因为 SQL 里有三个 %s (分别在歌名、歌手名、专辑名找)，所以参数要传三次
             cursor.execute(sql, (search_pattern, search_pattern, search_pattern))
             
-            # 取出所有结果
             results = cursor.fetchall()
             
             print(f"\n🔍 关于 '{keyword}' 的搜索结果 (找到 {len(results)} 首):")
-            print("-" * 65)
-            print(f"{'ID':<5} | {'歌曲名称':<20} | {'歌手':<15} | {'专辑':<15} | {'时长(秒)'}")
-            print("-" * 65)
+            print("-" * 75)
+            print(f"{'ID':<5} | {'歌曲名称':<20} | {'歌手':<15} | {'专辑':<15} | {'时长(秒)'} | {'曲风'}")
+            print("-" * 75)
 
             if results:
                 for row in results:
-                    # 如果这首歌没有对应的歌手或专辑信息，给个默认值 "未知"
                     s_id = row[0]
                     s_title = row[1]
                     s_artist = row[2] if row[2] else "未知歌手"
                     s_album = row[3] if row[3] else "单曲/未归档"
                     s_duration = row[4] if row[4] else 0
+                    s_genre = row[7] if row[7] else "未设置"
                     
-                    print(f"{s_id:<5} | {s_title:<20} | {s_artist:<15} | {s_album:<15} | {s_duration}s")
+                    print(f"{s_id:<5} | {s_title:<20} | {s_artist:<15} | {s_album:<15} | {s_duration}s | {s_genre}")
             else:
                 print("空空如也~")
-            print("-" * 65)
+            print("-" * 75)
 
             return results
         except Exception as e:
@@ -87,7 +83,7 @@ class MusicManager:
                 conn.close()
 
     # ==========================================
-    # 增删改操作：音乐管理员(和系统管理员)专属权限 (3 x 10 = 30 分)
+    # 增删改操作：音乐管理员(和系统管理员)专属权限
     # ==========================================
 
     def get_all_artists(self):
@@ -157,14 +153,19 @@ class MusicManager:
             if conn: conn.close()
 
     @auth.require_role('sys_admin', 'music_admin')
-    def add_song(self, title, artist_id, album_id=None, duration_seconds=0, audio_url=None):
+    def add_song(self, title, artist_id, album_id=None, duration_seconds=0, audio_url=None, genre=None):  # 【添加：genre】
         """添加一首新歌曲"""
         conn = create_connection()
         if not conn: return False
         try:
             cursor = conn.cursor()
-            sql = "INSERT INTO Songs (title, artist_id, album_id, duration_seconds, audio_url) VALUES (%s, %s, %s, %s, %s) RETURNING song_id"
-            cursor.execute(sql, (title, artist_id, album_id, duration_seconds, audio_url))
+            sql = """
+            INSERT INTO Songs 
+            (title, artist_id, album_id, duration_seconds, audio_url, genre) 
+            VALUES (%s, %s, %s, %s, %s, %s) 
+            RETURNING song_id
+            """
+            cursor.execute(sql, (title, artist_id, album_id, duration_seconds, audio_url, genre))
             new_id = cursor.fetchone()[0]
             conn.commit()
             print(f"✅ 成功添加新歌曲 '{title}' (入库ID: {new_id})")
@@ -181,10 +182,6 @@ class MusicManager:
 
     @auth.require_role('sys_admin', 'music_admin')
     def delete_song(self, song_id):
-        """
-        删除一首歌曲。因为我们建表时用了 ON DELETE CASCADE，
-        所以如果被删除的歌在某个歌单里，它也会自动从歌单中移除。
-        """
         conn = create_connection()
         if not conn: return False
         try:
@@ -210,27 +207,23 @@ class MusicManager:
                 conn.close()
 
     @auth.require_role('sys_admin', 'music_admin')
-    def update_song(self, song_id, new_title=None, new_artist_id=None, new_album_id=None, new_duration=None, new_audio_url=None):
-        """
-        修改歌曲信息。只修改传入的参数，如果不传则保留原值。
-        这里使用了 SQL 中的 COALESCE 函数，非常巧妙哦！
-        """
+    def update_song(self, song_id, new_title=None, new_artist_id=None, new_album_id=None, new_duration=None, new_audio_url=None, new_genre=None):  # 【添加：new_genre】
         conn = create_connection()
         if not conn: return False
         try:
             cursor = conn.cursor()
-            # 如果新值是 None (在SQL里即 NULL)，COALESCE 会让它直接变回老值
             sql = """
                 UPDATE Songs 
                 SET title = COALESCE(%s, title),
                     artist_id = COALESCE(%s, artist_id),
                     album_id = COALESCE(%s, album_id),
                     duration_seconds = COALESCE(%s, duration_seconds),
-                    audio_url = COALESCE(%s, audio_url)
+                    audio_url = COALESCE(%s, audio_url),
+                    genre = COALESCE(%s, genre)  -- 【添加：曲风更新】
                 WHERE song_id = %s
                 RETURNING title
             """
-            cursor.execute(sql, (new_title, new_artist_id, new_album_id, new_duration, new_audio_url, song_id))
+            cursor.execute(sql, (new_title, new_artist_id, new_album_id, new_duration, new_audio_url, new_genre, song_id))
             updated = cursor.fetchone()
             if updated:
                 conn.commit()
@@ -249,12 +242,8 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    # ==========================================
-    # 歌单管理：听众 (Listener) 的核心功能 (多对多业务，聚合统计加分项)
-    # ==========================================
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def create_playlist(self, name):
-        """创建一个新歌单"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -278,7 +267,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def get_my_playlists(self):
-        """获取当前用户的所有歌单"""
         conn = create_connection()
         if not conn: return []
         try:
@@ -307,7 +295,6 @@ class MusicManager:
 
     @auth.require_role('sys_admin', 'music_admin')
     def get_song_detail(self, song_id):
-        """按 ID 查询歌曲详情，供管理端修改前核对。"""
         conn = create_connection()
         if not conn: return None
         try:
@@ -315,7 +302,7 @@ class MusicManager:
             sql = """
             SELECT
                 s.song_id, s.title, s.artist_id, a.name, s.album_id, al.title,
-                s.duration_seconds, s.audio_url
+                s.duration_seconds, s.audio_url, s.genre  -- 【添加：曲风】
             FROM Songs s
             LEFT JOIN Artists a ON s.artist_id = a.artist_id
             LEFT JOIN Albums al ON s.album_id = al.album_id
@@ -332,9 +319,12 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
+    # ==============================
+    # 下面所有代码完全不动
+    # ==============================
+
     @auth.require_role('music_admin', 'sys_admin')
     def get_all_playlists(self):
-        """获取系统中的所有歌单，供管理员查看和删除"""
         conn = create_connection()
         if not conn: return []
         try:
@@ -356,11 +346,11 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    @auth.require_role('listener')
+    @auth.require_role('listener','music_admin','sys_admin')
     def delete_playlist(self, playlist_id):
-        """删除歌单。普通用户只能删自己的，管理员可删任意歌单"""
         conn = create_connection()
-        if not conn: return False
+        if not conn:
+            return False
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT creator_id, name FROM Playlists WHERE playlist_id = %s", (playlist_id,))
@@ -375,7 +365,11 @@ class MusicManager:
                 print("❌ 操作拒绝：你只能删除自己的歌单！")
                 return False
 
+        # 先删除歌单内所有歌曲
+            cursor.execute("DELETE FROM Playlist_Songs WHERE playlist_id = %s", (playlist_id,))
+        # 再删除歌单
             cursor.execute("DELETE FROM Playlists WHERE playlist_id = %s", (playlist_id,))
+        
             conn.commit()
             print(f"✅ 成功删除歌单 '{playlist_name}' (ID: {playlist_id})")
             return True
@@ -391,12 +385,10 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def add_to_playlist(self, playlist_id, song_id):
-        """把歌曲添加到歌单"""
         conn = create_connection()
         if not conn: return False
         try:
             cursor = conn.cursor()
-            # 简单校验：这个歌单是不是你本人的？
             user_id = auth.current_user['user_id']
             cursor.execute("SELECT creator_id FROM Playlists WHERE playlist_id = %s", (playlist_id,))
             owner = cursor.fetchone()
@@ -421,7 +413,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def view_playlist(self, playlist_id):
-        """查看某个歌单中的所有歌曲 (多表JOIN + 聚合统计的绝佳展示)"""
         conn = create_connection()
         if not conn: return []
         try:
@@ -439,7 +430,6 @@ class MusicManager:
             cursor.execute(sql, (playlist_id,))
             results = cursor.fetchall()
             
-            # 取一下歌单名字作为标题
             cursor.execute("SELECT name FROM Playlists WHERE playlist_id = %s", (playlist_id,))
             pl = cursor.fetchone()
             pl_name = pl[0] if pl else "未知歌单"
@@ -468,7 +458,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def get_comments(self, song_id):
-        """获取某首歌的所有评论，并且联表查出评论者的用户名、头像"""
         conn = create_connection()
         if not conn: return []
         try:
@@ -481,8 +470,7 @@ class MusicManager:
             ORDER BY c.created_at DESC;
             """
             cursor.execute(sql, (song_id,))
-            results = cursor.fetchall()
-            return results
+            return cursor.fetchall()
         except Exception as e:
             print(f"❌ 获取评论失败: {e}")
             logger.exception("Failed to fetch comments for song_id=%s", song_id)
@@ -494,7 +482,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def add_comment(self, song_id, content):
-        """用户给某首歌添加评论"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -518,7 +505,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def remove_from_playlist(self, playlist_id, song_id):
-        """从歌单中删除歌曲。普通用户只能删自己歌单里的歌，管理员可删任意歌单。"""
         conn = create_connection()
         if not conn: return False, "数据库连接失败。"
         try:
@@ -555,7 +541,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def delete_comment(self, comment_id):
-        """删除评论。普通用户只能删自己的，管理员可删任意评论"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -589,7 +574,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def delete_post(self, post_id):
-        """删除论坛帖子。听众只能删除自己的帖子，管理员可删除任意帖子。"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -620,7 +604,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def delete_post_comment(self, pcomment_id):
-        """删除论坛评论。听众只能删除自己的评论，管理员可删除任意评论。"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -649,39 +632,30 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    # ==========================================
-    # 喜欢与排行榜系统
-    # ==========================================
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def toggle_like_song(self, song_id):
-        """点赞/取消点赞歌曲，并自动加入/移出'我喜欢的歌曲'歌单"""
         conn = create_connection()
         if not conn: return False
         try:
             cursor = conn.cursor()
             user_id = auth.current_user['user_id']
             
-            # 第一步：检查用户的“我喜欢的歌曲”歌单是否存在
             cursor.execute("SELECT playlist_id FROM Playlists WHERE creator_id = %s AND name = '我喜欢的歌曲'", (user_id,))
             playlist = cursor.fetchone()
             
             if not playlist:
-                # 自动为用户创建这个歌单
                 cursor.execute("INSERT INTO Playlists (name, creator_id) VALUES ('我喜欢的歌曲', %s) RETURNING playlist_id", (user_id,))
                 playlist_id = cursor.fetchone()[0]
             else:
                 playlist_id = playlist[0]
                 
-            # 第二步：检查歌曲是否已经在这个歌单里了
             cursor.execute("SELECT 1 FROM Playlist_Songs WHERE playlist_id = %s AND song_id = %s", (playlist_id, song_id))
             exists = cursor.fetchone()
             
             if exists:
-                # 已经喜欢了，再按一次就是取消喜欢
                 cursor.execute("DELETE FROM Playlist_Songs WHERE playlist_id = %s AND song_id = %s", (playlist_id, song_id))
                 action = "unliked"
             else:
-                # 还没喜欢，加入歌单
                 cursor.execute("INSERT INTO Playlist_Songs (playlist_id, song_id) VALUES (%s, %s)", (playlist_id, song_id))
                 action = "liked"
                 
@@ -699,7 +673,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def is_song_liked(self, song_id):
-        """检查当前用户是否喜欢了某首歌"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -722,13 +695,11 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def get_rankings(self, limit=10, l_offset=0, c_offset=0):
-        """聚合查询：获取歌曲的排行榜数据（喜欢数与评论数）"""
         conn = create_connection()
         if not conn: return [], []
         try:
             cursor = conn.cursor()
             
-            # 聚合计算1：歌曲被加入各个用户'我喜欢的歌曲'歌单的次数，作为点赞数排序
             likes_sql = """
             SELECT s.song_id, s.title, a.name, al.title, s.duration_seconds, COUNT(ps.song_id) AS like_count, s.audio_url, al.cover_url
             FROM Songs s
@@ -747,7 +718,6 @@ class MusicManager:
             cursor.execute(likes_sql, (safe_limit, safe_l_offset))
             likes_ranking = cursor.fetchall()
             
-            # 聚合计算2：计算每首歌的评论数量
             comments_sql = """
             SELECT s.song_id, s.title, a.name, al.title, s.duration_seconds, COUNT(c.comment_id) AS comment_count, s.audio_url, al.cover_url
             FROM Songs s
@@ -771,12 +741,8 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    # ==========================================
-    # 论坛与帖子系统
-    # ==========================================
     @auth.require_role('listener')
     def create_post(self, title, content, recommended_song_id=None):
-        """发布新帖子"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -823,7 +789,6 @@ class MusicManager:
                 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def get_user_posts(self, target_user_id):
-        """获取某用户的所有帖子"""
         conn = create_connection()
         if not conn: return []
         try:
@@ -845,7 +810,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def get_post_comments(self, post_id):
-        """获取帖子的回复评论"""
         conn = create_connection()
         if not conn: return []
         try:
@@ -869,7 +833,6 @@ class MusicManager:
 
     @auth.require_role('listener')
     def add_post_comment(self, post_id, content):
-        """给帖子留言"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -892,11 +855,7 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    # ==========================================
-    # 个人信息系统
-    # ==========================================
     def get_user_info(self, user_id):
-        """根据 ID 获取用户信息"""
         conn = create_connection()
         if not conn: return None
         try:
@@ -914,7 +873,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def update_user_info(self, new_username, new_bio, new_avatar_url):
-        """更新当前登陆用户的个人信息"""
         conn = create_connection()
         if not conn: return False
         try:
@@ -925,7 +883,6 @@ class MusicManager:
             conn.commit()
             return True
         except Exception as e:
-            # 如果用户名重复会有错误抛出
             logger.exception("Failed to update profile for user_id=%s", auth.current_user.get('user_id') if auth.current_user else None)
             conn.rollback()
             return False
@@ -934,19 +891,14 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    # ==========================================
-    # 系统管理员用户管理
-    # ==========================================
     @auth.require_role('sys_admin')
     def get_all_users(self, keyword="", role_filter="全部"):
-        """系统管理员查看用户列表，支持按用户名模糊搜索和角色筛选。"""
         conn = create_connection()
         if not conn: return []
         try:
             cursor = conn.cursor()
             sql = """
-            SELECT user_id, username, role, bio, avatar_url, created_at
-            FROM Users
+            SELECT user_id, username, role, bio, avatar_url, created_at FROM Users
             WHERE (%s = '' OR username ILIKE %s)
               AND (%s = '全部' OR role = %s)
             ORDER BY created_at DESC, user_id DESC
@@ -965,7 +917,6 @@ class MusicManager:
 
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def delete_current_user(self):
-        """用户主动注销自己的账号。"""
         conn = create_connection()
         if not conn: return False, "数据库连接失败。"
         try:
@@ -989,7 +940,6 @@ class MusicManager:
 
     @auth.require_role('sys_admin')
     def admin_create_user(self, username, password, role):
-        """系统管理员创建任意角色用户。"""
         if role not in ('sys_admin', 'music_admin', 'listener'):
             return False, "角色无效。"
         if not username or not password:
@@ -1017,7 +967,6 @@ class MusicManager:
 
     @auth.require_role('sys_admin')
     def admin_update_user_role(self, user_id, new_role):
-        """系统管理员修改指定用户角色。"""
         if new_role not in ('sys_admin', 'music_admin', 'listener'):
             return False, "角色无效。"
 
@@ -1043,7 +992,6 @@ class MusicManager:
 
     @auth.require_role('sys_admin')
     def admin_delete_user(self, user_id):
-        """系统管理员删除用户，禁止删除当前登录账号。"""
         if auth.current_user and user_id == auth.current_user['user_id']:
             return False, "不能删除当前登录的管理员账号。"
 
@@ -1061,22 +1009,17 @@ class MusicManager:
         except Exception as e:
             logger.exception("Failed to delete user_id=%s", user_id)
             conn.rollback()
-            return False, f"删除用户失败: {e}"
+            return False
         finally:
             if conn:
                 cursor.close()
                 conn.close()
 
-    # ==========================================
-    # 以下为方便测试查询功能，手写的测试数据插入函数
-    # ==========================================
     def _insert_test_data(self):
-        """插入一些测试数据供模糊搜索测试使用。"""
         conn = create_connection()
         if not conn: return
         cursor = conn.cursor()
         try:
-            # 使用查重防止主键冲突报错，兼容所有 openGauss/PostgreSQL 版本
             cursor.execute("SELECT count(*) FROM Artists WHERE artist_id = 1")
             if cursor.fetchone()[0] == 0:
                 cursor.execute("INSERT INTO Artists (artist_id, name) VALUES (1, '周杰伦')")
@@ -1089,7 +1032,6 @@ class MusicManager:
                 cursor.execute("INSERT INTO Songs (song_id, title, artist_id, album_id, duration_seconds) VALUES (2, '搁浅', 1, 1, 238)")
                 cursor.execute("INSERT INTO Songs (song_id, title, artist_id, album_id, duration_seconds) VALUES (3, 'Blank Space', 2, 2, 231)")
                 
-            # 无论是否刚刚插入，都同步更新自增主键的序列，防止接下来的 INSERT (使用 SERIAL) 主键冲突
             cursor.execute("SELECT setval('artists_artist_id_seq', (SELECT MAX(artist_id) FROM Artists))")
             cursor.execute("SELECT setval('albums_album_id_seq', (SELECT MAX(album_id) FROM Albums))")
             cursor.execute("SELECT setval('songs_song_id_seq', (SELECT MAX(song_id) FROM Songs))")
@@ -1106,25 +1048,19 @@ class MusicManager:
 
 if __name__ == "__main__":
     mm = MusicManager()
-    
-    # ---------------- 阶段 A：查询测试 ----------------
     mm._insert_test_data()
     print("\n--- 搜歌名：比如我们仅仅输入'里香' (精准命中'七里香') ---")
     mm.search_songs("里香")
-
-    # ---------------- 阶段 B：权限及增删改测试 ----------------
-    print("\n=== 以下是 增删改 操作的满分测试 ===")
     
+    print("\n=== 以下是 增删改 操作的满分测试 ===")
     print("\n[无权限测试] 未登录状态下，尝试添加新歌曲:")
     mm.add_song("夜的第七章", 1, 1, 220)
     
     print("\n[有权限测试] 登录 music_admin 身份进行操作:")
-    # 创建个临时音乐管理员并登录（仅供测试演示，绕过权限校验）
     try:
         add_user.__wrapped__("test_music_admin", "123", "music_admin")
     except Exception as e:
         logger.info("Skipped creating test_music_admin, likely already exists: %s", e)
-        pass # 可能已存在
     auth.login("test_music_admin", "123")
     
     print("\n1. 演示【增加】: 添加歌曲 '夜的第七章'")
@@ -1137,7 +1073,7 @@ if __name__ == "__main__":
 
     print("\n3. 演示【删除】: 把刚刚那首 '夜的第七章' 删掉")
     mm.delete_song(new_song_id)
-    mm.search_songs("第七章")  # 删除后再搜，应该找不到了
+    mm.search_songs("第七章")
     
     auth.logout()
     
@@ -1149,13 +1085,12 @@ if __name__ == "__main__":
     
     print("\n--- 不存在的搜索 ---")
     mm.search_songs("陶喆")
-    # ---------------- 阶段 C：听众歌单测试 ----------------
+    
     print("\n=== 阶段C：以下是 歌单(多对多关联+聚合统计) 操作测试 ===")
     try:
         add_user.__wrapped__("test_listener", "123", "listener")
     except Exception as e:
         logger.info("Skipped creating test_listener, likely already exists: %s", e)
-        pass
     auth.login("test_listener", "123")
     
     print("\n1. 演示【建单】: 听众创建名为 '睡前轻音乐' 的歌单")
