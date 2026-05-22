@@ -112,6 +112,29 @@ class MusicManager:
         finally:
             if conn: conn.close()
 
+    def song_exists(self, title, artist_name, album_title):
+        conn = create_connection()
+        if not conn: return False
+        try:
+            cursor = conn.cursor()
+            sql = """
+            SELECT 1
+            FROM Songs s
+            JOIN Artists a ON s.artist_id = a.artist_id
+            JOIN Albums al ON s.album_id = al.album_id
+            WHERE s.title = %s AND a.name = %s AND al.title = %s
+            LIMIT 1
+            """
+            cursor.execute(sql, (title, artist_name, album_title))
+            return cursor.fetchone() is not None
+        except Exception:
+            logger.exception("Failed to check duplicate song title=%r artist=%r album=%r", title, artist_name, album_title)
+            return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
     @auth.require_role('sys_admin', 'music_admin')
     def get_or_create_artist(self, artist_name):
         if not artist_name: return None
@@ -741,7 +764,7 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
-    @auth.require_role('listener')
+    @auth.require_role('listener', 'music_admin', 'sys_admin')
     def create_post(self, title, content, recommended_song_id=None):
         conn = create_connection()
         if not conn: return False
@@ -915,6 +938,14 @@ class MusicManager:
                 cursor.close()
                 conn.close()
 
+    def _is_last_sys_admin(self, cursor, user_id):
+        cursor.execute("SELECT role FROM Users WHERE user_id = %s", (user_id,))
+        row = cursor.fetchone()
+        if not row or row[0] != 'sys_admin':
+            return False
+        cursor.execute("SELECT COUNT(*) FROM Users WHERE role = 'sys_admin'")
+        return cursor.fetchone()[0] <= 1
+
     @auth.require_role('listener', 'music_admin', 'sys_admin')
     def delete_current_user(self):
         conn = create_connection()
@@ -922,6 +953,9 @@ class MusicManager:
         try:
             cursor = conn.cursor()
             user_id = auth.current_user['user_id']
+            if self._is_last_sys_admin(cursor, user_id):
+                conn.rollback()
+                return False, "不能删除最后一个系统管理员。"
             cursor.execute("DELETE FROM Users WHERE user_id = %s RETURNING username", (user_id,))
             deleted = cursor.fetchone()
             if not deleted:
@@ -933,6 +967,102 @@ class MusicManager:
             logger.exception("Failed to delete current user_id=%s", auth.current_user.get('user_id') if auth.current_user else None)
             conn.rollback()
             return False, f"注销账号失败: {e}"
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_reset_user_password(self, user_id, new_password):
+        if not new_password:
+            return False, "新密码不能为空。"
+
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE Users SET password_hash = %s WHERE user_id = %s RETURNING username",
+                (hash_password(new_password), user_id)
+            )
+            updated = cursor.fetchone()
+            if not updated:
+                conn.rollback()
+                return False, "找不到该用户。"
+            conn.commit()
+            return True, f"用户 {updated[0]} 的密码已重置。"
+        except Exception as e:
+            logger.exception("Failed to reset password for user_id=%s", user_id)
+            conn.rollback()
+            return False, f"重置密码失败: {e}"
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_get_recent_content(self, limit=50):
+        conn = create_connection()
+        if not conn: return []
+        try:
+            cursor = conn.cursor()
+            safe_limit = max(int(limit), 1)
+            sql = """
+            SELECT 'post' AS content_type, p.post_id AS content_id, u.username, p.title, p.content, p.created_at
+            FROM Posts p
+            JOIN Users u ON p.user_id = u.user_id
+            UNION ALL
+            SELECT 'song_comment' AS content_type, c.comment_id AS content_id, u.username, s.title, c.content, c.created_at
+            FROM Comments c
+            JOIN Users u ON c.user_id = u.user_id
+            JOIN Songs s ON c.song_id = s.song_id
+            UNION ALL
+            SELECT 'post_comment' AS content_type, pc.pcomment_id AS content_id, u.username, p.title, pc.content, pc.created_at
+            FROM Post_Comments pc
+            JOIN Users u ON pc.user_id = u.user_id
+            JOIN Posts p ON pc.post_id = p.post_id
+            ORDER BY created_at DESC
+            LIMIT %s;
+            """
+            cursor.execute(sql, (safe_limit,))
+            return cursor.fetchall()
+        except Exception:
+            logger.exception("Failed to fetch recent content for moderation")
+            return []
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
+
+    @auth.require_role('sys_admin')
+    def admin_delete_content(self, content_type, content_id):
+        table_map = {
+            'post': ('Posts', 'post_id'),
+            'song_comment': ('Comments', 'comment_id'),
+            'post_comment': ('Post_Comments', 'pcomment_id'),
+        }
+        if content_type not in table_map:
+            return False, "内容类型无效。"
+
+        conn = create_connection()
+        if not conn: return False, "数据库连接失败。"
+        try:
+            cursor = conn.cursor()
+            table_name, id_column = table_map[content_type]
+            cursor.execute(
+                f"DELETE FROM {table_name} WHERE {id_column} = %s RETURNING {id_column}",
+                (content_id,)
+            )
+            deleted = cursor.fetchone()
+            if not deleted:
+                conn.rollback()
+                return False, "找不到该内容。"
+            conn.commit()
+            return True, f"已删除 {content_type} #{content_id}。"
+        except Exception as e:
+            logger.exception("Failed to delete moderated content type=%s id=%s", content_type, content_id)
+            conn.rollback()
+            return False, f"删除内容失败: {e}"
         finally:
             if conn:
                 cursor.close()
@@ -974,6 +1104,9 @@ class MusicManager:
         if not conn: return False, "数据库连接失败。"
         try:
             cursor = conn.cursor()
+            if new_role != 'sys_admin' and self._is_last_sys_admin(cursor, user_id):
+                conn.rollback()
+                return False, "不能降级最后一个系统管理员。"
             cursor.execute("UPDATE Users SET role = %s WHERE user_id = %s RETURNING username", (new_role, user_id))
             updated = cursor.fetchone()
             if not updated:
@@ -999,6 +1132,9 @@ class MusicManager:
         if not conn: return False, "数据库连接失败。"
         try:
             cursor = conn.cursor()
+            if self._is_last_sys_admin(cursor, user_id):
+                conn.rollback()
+                return False, "不能删除最后一个系统管理员。"
             cursor.execute("DELETE FROM Users WHERE user_id = %s RETURNING username", (user_id,))
             deleted = cursor.fetchone()
             if not deleted:
@@ -1009,7 +1145,7 @@ class MusicManager:
         except Exception as e:
             logger.exception("Failed to delete user_id=%s", user_id)
             conn.rollback()
-            return False
+            return False, f"删除用户失败: {e}"
         finally:
             if conn:
                 cursor.close()
