@@ -17,24 +17,21 @@ def get_avatar_src(avatar_path):
     return None
 
 from auth import auth, add_user
+from add_song_state import (
+    get_add_song_draft,
+    reset_add_song_form_state,
+    restore_add_song_widget_value,
+    sync_add_song_step_to_draft,
+)
 from music_manager import MusicManager
+from music_service import MusicLibraryService
 
 APP_NAME = "EchoBase"
 APP_FULL_NAME = "EchoBase 音乐社区"
 
 st.set_page_config(page_title=APP_FULL_NAME, page_icon="🎵", layout="wide")
 mm = MusicManager()
-
-ADD_SONG_FORM_KEYS = (
-    "add_song_title", "add_artist_name", "add_album_name",
-    "add_song_genre", "add_audio_url", "add_audio_file",
-)
-
-def reset_add_song_form_state():
-    for key in ADD_SONG_FORM_KEYS:
-        st.session_state.pop(key, None)
-    st.session_state.add_song_step = 1
-    st.session_state.add_song_audio_mode = None
+music_service = MusicLibraryService(mm)
 
 def apply_theme():
     st.markdown(
@@ -953,37 +950,58 @@ else:
                             st.session_state.add_song_audio_mode = None
 
                         step = st.session_state.add_song_step
-                        n_title = st.session_state.get('add_song_title', '')
-                        artist_name = st.session_state.get('add_artist_name', '')
-                        album_name = st.session_state.get('add_album_name', '')
-                        genre = st.session_state.get('add_song_genre', '')
-                        final_url = None
-                        auto_dur = None
+                        draft = get_add_song_draft()
+                        step_names = ["歌曲信息", "歌手专辑", "曲风", "音频"]
+                        progress_cols = st.columns(4)
+                        for idx, col in enumerate(progress_cols, start=1):
+                            marker = "●" if idx == step else "✓" if idx < step else "○"
+                            col.caption(f"{marker} {idx}. {step_names[idx - 1]}")
+                        st.progress(min(step, 4) / 4)
+                        if step > 1:
+                            back_col, _ = st.columns([0.34, 8.66])
+                            if back_col.button("←", key=f"add_song_back_{step}", help="返回上一步修改", use_container_width=True):
+                                sync_add_song_step_to_draft(step)
+                                st.session_state.add_song_step = max(1, step - 1)
+                                st.rerun()
+
+                        n_title = draft.get('title', '')
+                        artist_name = draft.get('artist', '')
+                        album_name = draft.get('album', '')
+                        genre = draft.get('genre', '')
+                        final_url = draft.get('audio_url')
+                        auto_dur = draft.get('duration')
 
                         if step == 1:
+                            restore_add_song_widget_value("add_song_title", draft.get("title", ""))
                             n_title = st.text_input("歌曲名称 *", key="add_song_title")
                             can_next = bool(n_title.strip())
                             if st.button("下一步", type="primary", use_container_width=True):
                                 if can_next:
+                                    sync_add_song_step_to_draft(step)
                                     st.session_state.add_song_step = 2
                                     st.rerun()
                                 else:
                                     st.warning("请先填写歌曲名称")
 
                         elif step == 2:
+                            restore_add_song_widget_value("add_artist_name", draft.get("artist", ""))
+                            restore_add_song_widget_value("add_album_name", draft.get("album", ""))
                             artist_name = st.text_input("歌手名称 *", key="add_artist_name")
                             album_name = st.text_input("专辑名称 *", key="add_album_name")
                             can_next = bool(artist_name.strip() and album_name.strip())
                             if st.button("下一步", type="primary", use_container_width=True):
                                 if can_next:
+                                    sync_add_song_step_to_draft(step)
                                     st.session_state.add_song_step = 3
                                     st.rerun()
                                 else:
                                     st.warning("请先填写歌手名称和专辑名称")
 
                         elif step == 3:
+                            restore_add_song_widget_value("add_song_genre", draft.get("genre", ""))
                             genre = st.text_input("歌曲曲风（可留空）", placeholder="例如：流行、古风、摇滚", key="add_song_genre")
                             if st.button("下一步", type="primary", use_container_width=True):
+                                sync_add_song_step_to_draft(step)
                                 st.session_state.add_song_step = 4
                                 st.rerun()
 
@@ -991,85 +1009,155 @@ else:
                             a1, a2 = st.columns(2)
                             if a1.button("在线URL", use_container_width=True):
                                 st.session_state.add_song_audio_mode = "url"
+                                st.session_state.add_audio_uploaded_path = None
+                                st.session_state.add_audio_duration = None
+                                st.session_state.add_audio_upload_key = None
+                                draft["audio_url"] = st.session_state.get("add_audio_url", "")
+                                draft["duration"] = None
                             if a2.button("本地上传MP3", use_container_width=True):
                                 st.session_state.add_song_audio_mode = "upload"
+                                st.session_state.add_audio_url = ""
+                                draft["audio_url"] = st.session_state.get("add_audio_uploaded_path")
+                                draft["duration"] = st.session_state.get("add_audio_duration")
 
                             if st.session_state.add_song_audio_mode == "url":
+                                restore_add_song_widget_value("add_audio_url", draft.get("audio_url", ""))
                                 final_url = st.text_input("音频URL *", key="add_audio_url")
+                                st.session_state.add_audio_uploaded_path = None
+                                st.session_state.add_audio_duration = None
+                                st.session_state.add_audio_upload_key = None
+                                draft["audio_url"] = final_url
+                                draft["duration"] = None
                             elif st.session_state.add_song_audio_mode == "upload":
                                 up = st.file_uploader("上传MP3 *", type=["mp3"], key="add_audio_file")
                                 if up:
                                     import os, uuid
                                     os.makedirs("audios", exist_ok=True)
-                                    fn = f"audios/{uuid.uuid4()}.mp3"
-                                    with open(fn, "wb") as f:
-                                        f.write(up.getvalue())
+                                    upload_bytes = up.getvalue()
+                                    current_upload_key = f"{up.name}:{up.size}"
+                                    previous_upload_key = st.session_state.get('add_audio_upload_key')
+                                    if previous_upload_key != current_upload_key:
+                                        fn = f"audios/{uuid.uuid4()}.mp3"
+                                        with open(fn, "wb") as f:
+                                            f.write(upload_bytes)
+                                        st.session_state.add_audio_uploaded_path = fn
+                                        st.session_state.add_audio_upload_key = current_upload_key
+                                    else:
+                                        fn = st.session_state.get('add_audio_uploaded_path')
                                     final_url = fn
+                                    draft["audio_url"] = final_url
 
                                     try:
                                         from mutagen.mp3 import MP3
                                         import io
-                                        audio = MP3(io.BytesIO(up.getvalue()))
+                                        audio = MP3(io.BytesIO(upload_bytes))
                                         auto_dur = int(audio.info.length)
+                                        st.session_state.add_audio_duration = auto_dur
+                                        draft["duration"] = auto_dur
                                         st.success(f"✅ 时长识别：{auto_dur} 秒")
-                                    except Exception:
-                                        auto_dur = 1
-                                        st.warning("⚠️ 无法识别时长，使用默认1秒")
+                                    except Exception as exc:
+                                        auto_dur = st.session_state.get('add_audio_duration') or 1
+                                        st.session_state.add_audio_duration = auto_dur
+                                        draft["duration"] = auto_dur
+                                        st.warning(f"⚠️ 无法识别时长，使用默认1秒（{exc}）")
+                                else:
+                                    final_url = st.session_state.get('add_audio_uploaded_path') or draft.get("audio_url")
+                                    auto_dur = st.session_state.get('add_audio_duration') or draft.get("duration")
 
+                            n_title = draft.get('title', '')
+                            artist_name = draft.get('artist', '')
+                            album_name = draft.get('album', '')
+                            genre = draft.get('genre', '')
+                            final_url = final_url or draft.get('audio_url')
+                            auto_dur = auto_dur or draft.get('duration')
+                            missing_fields = []
+                            if not n_title.strip():
+                                missing_fields.append("歌曲名称")
+                            if not artist_name.strip():
+                                missing_fields.append("歌手名称")
+                            if not album_name.strip():
+                                missing_fields.append("专辑名称")
+                            if not final_url:
+                                missing_fields.append("音频")
                             all_required_ready = bool(
-                                n_title.strip() and artist_name.strip() and album_name.strip() and final_url
+                                not missing_fields
                             )
+                            if missing_fields:
+                                st.caption("确认前还需要：" + "、".join(missing_fields))
                             if st.button("确认", type="primary", use_container_width=True, disabled=not all_required_ready):
+                                sync_add_song_step_to_draft(step)
+                                n_title = draft.get('title', '')
+                                artist_name = draft.get('artist', '')
+                                album_name = draft.get('album', '')
+                                genre = draft.get('genre', '')
+                                final_url = draft.get('audio_url')
+                                auto_dur = draft.get('duration')
                                 if not (n_title.strip() and artist_name.strip() and album_name.strip() and final_url):
                                     st.error("请填写必填项")
-                                elif mm.song_exists(n_title.strip(), artist_name.strip(), album_name.strip()):
-                                    st.error("歌曲已存在")
                                 else:
-                                    aid = mm.get_or_create_artist(artist_name.strip())
-                                    alid = mm.get_or_create_album(album_name.strip())
-                                    sid = mm.add_song(
-                                        n_title.strip(), aid, alid,
+                                    result = music_service.add_song(
+                                        n_title,
+                                        artist_name,
+                                        album_name,
                                         auto_dur if auto_dur else 1,
                                         final_url,
-                                        genre.strip() or None,
+                                        genre,
                                     )
-                                    if sid:
-                                        st.success("添加成功！")
+                                    if result.ok:
+                                        st.success(result.message)
                                         st.session_state.reset_add_song_form = True
                                         st.rerun()
+                                    else:
+                                        st.error(result.message)
+                                        if result.detail:
+                                            st.caption(result.detail)
 
                     # ==================== 修改歌曲信息 ====================
                     with st.expander("✏️ 修改歌曲信息"):
-                        kw = st.text_input("输入歌曲名称搜索")
+                        kw = st.text_input("输入歌曲名称搜索", key="edit_song_kw")
                         sid = None
                         if kw:
-                            res = mm.search_songs(kw)
+                            res = mm.search_songs(kw, limit=30)
                             if res:
-                                opt = {f"{r[1]} - {r[2]}": r[0] for r in res}
-                                sel = st.selectbox("选择歌曲", opt.keys())
+                                opt = {f"ID {r[0]} | {r[1]} - {r[2]} | 专辑：{r[3] if r[3] else '未知'}": r[0] for r in res}
+                                sel = st.selectbox("选择歌曲", opt.keys(), key="edit_song_select")
                                 sid = opt[sel]
 
                         if sid:
                             d = mm.get_song_detail(sid)
-                            st.caption(f"当前：{d[1]} / {d[4]} / {d[6]}秒 / 曲风：{d[8] if d[8] else '未知'}")
-                            c1,c2 = st.columns(2)
-                            nt = c1.text_input("新标题")
-                            na = c1.text_input("新歌手")
-                            nal = c2.text_input("新专辑")
-                            nd = c2.number_input("新时长(秒)", min_value=0)
-                            nu = st.text_input("新音频地址")
-                            ng = st.text_input("新曲风")
+                            if d:
+                                st.caption(f"当前：{d[1]} / {d[3]} / {d[5]} / {d[6]}秒 / 曲风：{d[8] if d[8] else '未知'}")
+                                c1,c2 = st.columns(2)
+                                nt = c1.text_input("标题", value=d[1] or "", key=f"edit_title_{sid}")
+                                na = c1.text_input("歌手", value=d[3] or "", key=f"edit_artist_{sid}")
+                                nal = c2.text_input("专辑", value=d[5] or "", key=f"edit_album_{sid}")
+                                nd = c2.number_input("时长(秒)", min_value=1, value=int(d[6] or 1), key=f"edit_duration_{sid}")
+                                nu = st.text_input("音频地址", value=d[7] or "", key=f"edit_audio_{sid}")
+                                ng = st.text_input("曲风", value=d[8] or "", key=f"edit_genre_{sid}")
 
-                            if st.button("保存修改"):
-                                naid = mm.get_or_create_artist(na) if na else None
-                                nalid = mm.get_or_create_album(nal) if nal else None
-                                ok = mm.update_song(sid, nt or None, naid, nalid, nd if nd>0 else None, nu or None, ng or None)
-                                if ok:
-                                    st.success("修改成功")
-                                    st.rerun()
+                                if st.button("保存修改", key=f"save_edit_song_{sid}"):
+                                    result = music_service.update_song(
+                                        sid,
+                                        nt,
+                                        na,
+                                        nal,
+                                        nd,
+                                        nu,
+                                        ng,
+                                    )
+                                    if result.ok:
+                                        st.success(result.message)
+                                        st.rerun()
+                                    else:
+                                        st.error(result.message)
+                                        if result.detail:
+                                            st.caption(result.detail)
 
                     # ==================== 删除歌曲 ====================
                     with st.expander("🗑️ 删除歌曲"):
+                        if st.session_state.pop("clear_delete_song_search", False):
+                            st.session_state.delete_song_kw = ""
+                            st.session_state.pop("delete_song_select", None)
                         delete_kw = st.text_input(
                             "输入关键词搜索要删除的歌曲（歌名/歌手/专辑）",
                             key="delete_song_kw",
@@ -1094,6 +1182,7 @@ else:
                         if delete_song_id and st.button("🔥 删除选中歌曲", key="btn_delete_selected_song"):
                             if mm.delete_song(delete_song_id):
                                 st.success("删除成功")
+                                st.session_state.clear_delete_song_search = True
                                 st.rerun()
                             else:
                                 st.error("删除失败，请检查该歌曲是否存在")

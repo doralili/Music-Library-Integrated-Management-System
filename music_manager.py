@@ -11,12 +11,18 @@ class MusicManager:
     音乐库核心管理模块：负责管理音乐、歌手、专辑的增删改查。
     """
     def __init__(self):
-        pass
+        self.last_error = ""
+
+    def _clear_error(self):
+        self.last_error = ""
+
+    def _remember_error(self, error):
+        self.last_error = str(error)
 
     # ==========================================
     # 高级模糊查询 (拿满 10 分查询分的关键)
     # ==========================================
-    def search_songs(self, keyword):
+    def search_songs(self, keyword, limit=30, offset=0):
         """
         通过关键词模糊搜索音乐库。
         这不仅是一个简单的 WHERE = 查询，它还涉及了三个表的联查 (JOIN)
@@ -45,11 +51,14 @@ class MusicManager:
             WHERE s.title ILIKE %s
                OR a.name ILIKE %s
                OR al.title ILIKE %s
-            ORDER BY s.title ASC;
+            ORDER BY s.title ASC, s.song_id ASC
+            LIMIT %s OFFSET %s;
             """
             
             search_pattern = f"%{keyword}%"
-            cursor.execute(sql, (search_pattern, search_pattern, search_pattern))
+            safe_limit = min(max(int(limit), 1), 100)
+            safe_offset = max(int(offset), 0)
+            cursor.execute(sql, (search_pattern, search_pattern, search_pattern, safe_limit, safe_offset))
             
             results = cursor.fetchall()
             
@@ -123,6 +132,7 @@ class MusicManager:
             JOIN Artists a ON s.artist_id = a.artist_id
             JOIN Albums al ON s.album_id = al.album_id
             WHERE s.title = %s AND a.name = %s AND al.title = %s
+              AND al.artist_id = a.artist_id
             LIMIT 1
             """
             cursor.execute(sql, (title, artist_name, album_title))
@@ -138,8 +148,11 @@ class MusicManager:
     @auth.require_role('sys_admin', 'music_admin')
     def get_or_create_artist(self, artist_name):
         if not artist_name: return None
+        self._clear_error()
         conn = create_connection()
-        if not conn: return None
+        if not conn:
+            self._remember_error("数据库连接失败")
+            return None
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT artist_id FROM Artists WHERE name = %s", (artist_name,))
@@ -149,31 +162,96 @@ class MusicManager:
             new_id = cursor.fetchone()[0]
             conn.commit()
             return new_id
-        except Exception:
+        except Exception as e:
+            self._remember_error(e)
             logger.exception("Failed to get or create artist: %s", artist_name)
             return None
         finally:
             if conn: conn.close()
 
     @auth.require_role('sys_admin', 'music_admin')
-    def get_or_create_album(self, album_title):
+    def get_or_create_album(self, album_title, artist_id=None):
         if not album_title: return None
+        self._clear_error()
         conn = create_connection()
-        if not conn: return None
+        if not conn:
+            self._remember_error("数据库连接失败")
+            return None
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT album_id FROM Albums WHERE title = %s", (album_title,))
+            if artist_id:
+                cursor.execute("SELECT album_id FROM Albums WHERE title = %s AND artist_id = %s", (album_title, artist_id))
+            else:
+                cursor.execute("SELECT album_id FROM Albums WHERE title = %s ORDER BY album_id LIMIT 1", (album_title,))
             res = cursor.fetchone()
             if res: return res[0]
-            cursor.execute("INSERT INTO Albums (title) VALUES (%s) RETURNING album_id", (album_title,))
+            cursor.execute("INSERT INTO Albums (title, artist_id) VALUES (%s, %s) RETURNING album_id", (album_title, artist_id))
             new_id = cursor.fetchone()[0]
             conn.commit()
             return new_id
-        except Exception:
+        except Exception as e:
+            self._remember_error(e)
             logger.exception("Failed to get or create album: %s", album_title)
             return None
         finally:
             if conn: conn.close()
+
+    @auth.require_role('sys_admin', 'music_admin')
+    def add_song_with_metadata(self, title, artist_name, album_title, duration_seconds, audio_url, genre=None):
+        self._clear_error()
+        conn = create_connection()
+        if not conn:
+            self._remember_error("数据库连接失败")
+            return False
+        try:
+            cursor = conn.cursor()
+            clean_title = title.strip()
+            clean_artist = artist_name.strip()
+            clean_album = album_title.strip()
+            clean_genre = genre.strip() if genre else None
+
+            cursor.execute("SELECT artist_id FROM Artists WHERE name = %s", (clean_artist,))
+            artist_row = cursor.fetchone()
+            if artist_row:
+                artist_id = artist_row[0]
+            else:
+                cursor.execute("INSERT INTO Artists (name) VALUES (%s) RETURNING artist_id", (clean_artist,))
+                artist_id = cursor.fetchone()[0]
+
+            cursor.execute(
+                "SELECT album_id FROM Albums WHERE title = %s AND artist_id = %s",
+                (clean_album, artist_id),
+            )
+            album_row = cursor.fetchone()
+            if album_row:
+                album_id = album_row[0]
+            else:
+                cursor.execute(
+                    "INSERT INTO Albums (title, artist_id) VALUES (%s, %s) RETURNING album_id",
+                    (clean_album, artist_id),
+                )
+                album_id = cursor.fetchone()[0]
+
+            cursor.execute(
+                """
+                INSERT INTO Songs (title, artist_id, album_id, duration_seconds, audio_url, genre)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING song_id
+                """,
+                (clean_title, artist_id, album_id, duration_seconds, audio_url, clean_genre),
+            )
+            song_id = cursor.fetchone()[0]
+            conn.commit()
+            return song_id
+        except Exception as e:
+            self._remember_error(e)
+            logger.exception("Failed to add song with metadata title=%r artist=%r album=%r", title, artist_name, album_title)
+            conn.rollback()
+            return False
+        finally:
+            if conn:
+                cursor.close()
+                conn.close()
 
     @auth.require_role('sys_admin', 'music_admin')
     def add_song(self, title, artist_id, album_id=None, duration_seconds=0, audio_url=None, genre=None):  # 【添加：genre】
@@ -231,8 +309,11 @@ class MusicManager:
 
     @auth.require_role('sys_admin', 'music_admin')
     def update_song(self, song_id, new_title=None, new_artist_id=None, new_album_id=None, new_duration=None, new_audio_url=None, new_genre=None):  # 【添加：new_genre】
+        self._clear_error()
         conn = create_connection()
-        if not conn: return False
+        if not conn:
+            self._remember_error("数据库连接失败")
+            return False
         try:
             cursor = conn.cursor()
             sql = """
