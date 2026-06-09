@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="760" viewBox="0 0 1800 760" role="img" aria-labelledby="title desc">
+  <title id="title">Permission Workflow Diagram</title>
+  <desc id="desc">A clean academic vector diagram for the RBAC login and permission workflow.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text {
+        font-family: "Times New Roman", Times, serif;
+        fill: #1F2937;
+        letter-spacing: 0;
+      }
+      .title {
+        font-size: 34px;
+        font-weight: 700;
+      }
+      .subtitle {
+        font-size: 20px;
+        fill: #4B5563;
+      }
+      .node-title {
+        font-size: 25px;
+        font-weight: 700;
+      }
+      .node-note {
+        font-size: 17px;
+        fill: #4B5563;
+      }
+      .small-label {
+        font-size: 15px;
+        fill: #64748B;
+      }
+      .code-label {
+        font-size: 16px;
+        fill: #334155;
+      }
+      .node {
+        stroke-width: 2;
+      }
+      .arrow {
+        fill: none;
+        stroke: #6B7280;
+        stroke-width: 2.4;
+        marker-end: url(#arrow);
+      }
+      .soft-arrow {
+        fill: none;
+        stroke: #94A3B8;
+        stroke-width: 2.1;
+        stroke-dasharray: 7 8;
+        marker-end: url(#arrow-soft);
+      }
+      .icon-stroke {
+        fill: none;
+        stroke: #334155;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icon-fill {
+        fill: #334155;
+      }
+    </style>
+  </defs>
+
+  <rect width="1800" height="760" fill="#FFFFFF"/>
+
+  <text x="900" y="72" text-anchor="middle" class="title">Permission Workflow Diagram</text>
+  <text x="900" y="104" text-anchor="middle" class="subtitle">Role-based access control in the music management system</text>
+
+  <!-- Main workflow nodes -->
+  <g id="user-login">
+    <rect x="70" y="245" width="210" height="154" rx="8" fill="#EAF3FF" stroke="#A8C7EA" class="node"/>
+    <circle cx="130" cy="298" r="23" fill="#D8EAFE" stroke="#7FAFE3" stroke-width="2"/>
+    <path d="M130 293a11 11 0 1 0 0.1 0" class="icon-stroke"/>
+    <path d="M105 346c5-20 45-20 50 0" class="icon-stroke"/>
+    <text x="175" y="306" text-anchor="middle" class="node-title">User Login</text>
+    <text x="175" y="344" text-anchor="middle" class="node-note">username</text>
+    <text x="175" y="370" text-anchor="middle" class="node-note">password</text>
+  </g>
+
+  <g id="query-users">
+    <rect x="360" y="245" width="230" height="154" rx="8" fill="#E9F7F3" stroke="#9FD4C4" class="node"/>
+    <ellipse cx="423" cy="292" rx="29" ry="12" fill="#D8F0E9" stroke="#70BFA9" stroke-width="2"/>
+    <path d="M394 292v42c0 7 13 13 29 13s29-6 29-13v-42" class="icon-stroke"/>
+    <path d="M394 313c0 7 13 13 29 13s29-6 29-13" class="icon-stroke"/>
+    <text x="490" y="306" text-anchor="middle" class="node-title">Query Users</text>
+    <text x="490" y="344" text-anchor="middle" class="node-note">Users Table</text>
+    <text x="490" y="371" text-anchor="middle" class="code-label">user_id, role, password_hash</text>
+  </g>
+
+  <g id="hash-check">
+    <rect x="670" y="245" width="240" height="154" rx="8" fill="#F1EEFF" stroke="#C5BAF2" class="node"/>
+    <rect x="719" y="302" width="48" height="38" rx="7" fill="#E4DEFF" stroke="#9B8BE8" stroke-width="2"/>
+    <path d="M728 302v-15c0-24 31-24 31 0v15" class="icon-stroke"/>
+    <path d="M743 318v10" class="icon-stroke"/>
+    <circle cx="743" cy="316" r="3" class="icon-fill"/>
+    <path d="M779 323l15 15 31-36" fill="none" stroke="#6D64C8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="790" y="284" text-anchor="middle" class="node-title">Check Hash</text>
+    <text x="790" y="361" text-anchor="middle" class="node-note">PBKDF2-SHA256</text>
+    <text x="790" y="387" text-anchor="middle" class="code-label">check_password_hash</text>
+  </g>
+
+  <g id="save-role">
+    <rect x="990" y="245" width="230" height="154" rx="8" fill="#FFF4DD" stroke="#E6C47F" class="node"/>
+    <path d="M1045 286h52l18 19v51h-70z" fill="#FFE8B6" stroke="#C99A36" stroke-width="2"/>
+    <path d="M1097 286v19h18" class="icon-stroke"/>
+    <path d="M1060 322h38M1060 341h30" class="icon-stroke"/>
+    <circle cx="1135" cy="327" r="22" fill="#FFF4DD" stroke="#C99A36" stroke-width="2"/>
+    <path d="M1125 327l7 7 14-18" fill="none" stroke="#B98524" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1105" y="284" text-anchor="middle" class="node-title">Save Role</text>
+    <text x="1105" y="363" text-anchor="middle" class="node-note">Current User</text>
+    <text x="1105" y="389" text-anchor="middle" class="code-label">auth.current_user.role</text>
+  </g>
+
+  <g id="decorator">
+    <rect x="1300" y="245" width="250" height="154" rx="8" fill="#EDF7FF" stroke="#A8CFEB" class="node"/>
+    <text x="1344" y="336" text-anchor="middle" font-size="68" fill="#6D9FC9">{</text>
+    <text x="1506" y="336" text-anchor="middle" font-size="68" fill="#6D9FC9">}</text>
+    <path d="M1382 310h84M1382 333h84M1382 356h58" class="icon-stroke"/>
+    <text x="1425" y="284" text-anchor="middle" class="node-title">Role Decorator</text>
+    <text x="1425" y="386" text-anchor="middle" class="code-label">@require_role(...)</text>
+  </g>
+
+  <g id="decision">
+    <path d="M1650 246 L1754 322 L1650 398 L1560 322 Z" fill="#F8FAFC" stroke="#B7C2D0" stroke-width="2"/>
+    <text x="1650" y="316" text-anchor="middle" class="node-title">Role</text>
+    <text x="1650" y="344" text-anchor="middle" class="node-title">Match</text>
+  </g>
+
+  <!-- Main arrows -->
+  <path d="M280 322H350" class="arrow"/>
+  <path d="M590 322H660" class="arrow"/>
+  <path d="M910 322H980" class="arrow"/>
+  <path d="M1220 322H1290" class="arrow"/>
+  <path d="M1550 322H1560" class="arrow"/>
+
+  <!-- Decision outputs -->
+  <g id="allow">
+    <rect x="1470" y="520" width="240" height="88" rx="8" fill="#E9F8EF" stroke="#96D3AD" stroke-width="2"/>
+    <path d="M1518 565l19 19 40-48" fill="none" stroke="#55A36F" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1612" y="560" text-anchor="middle" class="node-title">Allow Operation</text>
+    <text x="1612" y="587" text-anchor="middle" class="node-note">execute function</text>
+  </g>
+
+  <g id="deny">
+    <rect x="1470" y="124" width="240" height="88" rx="8" fill="#FFF0F0" stroke="#E7AEAE" stroke-width="2"/>
+    <path d="M1520 151l38 38M1558 151l-38 38" fill="none" stroke="#C97474" stroke-width="4.5" stroke-linecap="round"/>
+    <text x="1612" y="164" text-anchor="middle" class="node-title">Deny Operation</text>
+    <text x="1612" y="191" text-anchor="middle" class="node-note">return None</text>
+  </g>
+
+  <path d="M1650 398V510" class="arrow"/>
+  <path d="M1650 246V222H1612V216" class="arrow"/>
+  <text x="1675" y="462" class="small-label">allowed role</text>
+  <text x="1668" y="238" class="small-label">otherwise</text>
+
+  <!-- Authentication failure path -->
+  <path d="M790 399V458C790 492 820 514 854 514H1410C1444 514 1470 492 1470 458V212" class="soft-arrow"/>
+  <text x="882" y="446" class="small-label">invalid hash</text>
+
+  <!-- Method anchors -->
+  <g id="method-labels">
+    <rect x="360" y="454" width="230" height="48" rx="6" fill="#FFFFFF" stroke="#D4DEE8" stroke-width="1.5"/>
+    <text x="475" y="484" text-anchor="middle" class="code-label">SELECT ... FROM Users</text>
+    <rect x="1302" y="454" width="248" height="48" rx="6" fill="#FFFFFF" stroke="#D4DEE8" stroke-width="1.5"/>
+    <text x="1426" y="484" text-anchor="middle" class="code-label">role in allowed_roles</text>
+  </g>
+
+  <!-- Legend -->
+  <g id="legend">
+    <rect x="72" y="646" width="500" height="58" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <circle cx="108" cy="675" r="8" fill="#EAF3FF" stroke="#A8C7EA"/>
+    <text x="126" y="681" class="small-label">Authentication</text>
+    <circle cx="250" cy="675" r="8" fill="#E9F7F3" stroke="#9FD4C4"/>
+    <text x="268" y="681" class="small-label">Database Query</text>
+    <circle cx="408" cy="675" r="8" fill="#FFF4DD" stroke="#E6C47F"/>
+    <text x="426" y="681" class="small-label">Session Role</text>
+  </g>
+</svg>

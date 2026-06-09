@@ -1,6 +1,10 @@
 import re
+from pathlib import Path
 
-with open(r"d:\数据库系统\poj1\music_manager.py", "r", encoding="utf-8") as f:
+BASE_DIR = Path(__file__).resolve().parent
+MUSIC_MANAGER_FILE = BASE_DIR / "music_manager.py"
+
+with open(MUSIC_MANAGER_FILE, "r", encoding="utf-8") as f:
     content = f.read()
 
 new_methods = """
@@ -66,7 +70,7 @@ new_methods = """
 
 content = content.replace("    @auth.require_role('sys_admin', 'music_admin')\n    def add_song", new_methods + "    @auth.require_role('sys_admin', 'music_admin')\n    def add_song")
 
-with open(r"d:\数据库系统\poj1\music_manager.py", "w", encoding="utf-8") as f:
+with open(MUSIC_MANAGER_FILE, "w", encoding="utf-8") as f:
     f.write(content)
 
 print("success")

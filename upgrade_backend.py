@@ -1,6 +1,12 @@
 import re
+from pathlib import Path
+
 import psycopg2
 from werkzeug.security import generate_password_hash
+
+BASE_DIR = Path(__file__).resolve().parent
+AUTH_FILE = BASE_DIR / "auth.py"
+MUSIC_MANAGER_FILE = BASE_DIR / "music_manager.py"
 
 conn = psycopg2.connect(user='myadmin', password='Axmo@9830', host='127.0.0.1', port='5432', database='music')
 conn.autocommit = True
@@ -51,7 +57,7 @@ except Exception as e:
 
 # 2. Update auth.py
 print("Updating auth.py...")
-with open(r'd:\数据库系统\poj1\auth.py', 'r', encoding='utf-8') as f:
+with open(AUTH_FILE, 'r', encoding='utf-8') as f:
     auth_text = f.read()
 
 auth_text = re.sub(
@@ -82,13 +88,13 @@ new_login = """            sql = "SELECT user_id, role, password_hash FROM Users
                 self.current_user = {"""
 auth_text = auth_text.replace(old_login, new_login)
 
-with open(r'd:\数据库系统\poj1\auth.py', 'w', encoding='utf-8') as f:
+with open(AUTH_FILE, 'w', encoding='utf-8') as f:
     f.write(auth_text)
 
 
 # 3. Update music_manager.py
 print("Updating music_manager.py...")
-with open(r'd:\数据库系统\poj1\music_manager.py', 'r', encoding='utf-8') as f:
+with open(MUSIC_MANAGER_FILE, 'r', encoding='utf-8') as f:
     mm_text = f.read()
 
 # search_songs
@@ -101,7 +107,7 @@ mm_text = mm_text.replace('GROUP BY s.song_id, s.title, a.name, al.title, s.dura
 # get_rankings comments
 mm_text = mm_text.replace('s.duration_seconds, COUNT(c.comment_id) AS comment_count', 's.duration_seconds, COUNT(c.comment_id) AS comment_count, s.audio_url, al.cover_url')
 
-with open(r'd:\数据库系统\poj1\music_manager.py', 'w', encoding='utf-8') as f:
+with open(MUSIC_MANAGER_FILE, 'w', encoding='utf-8') as f:
     f.write(mm_text)
 
 print("Done backend!")

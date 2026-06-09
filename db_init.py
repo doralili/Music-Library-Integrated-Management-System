@@ -1,5 +1,6 @@
 import argparse
 import csv
+from pathlib import Path
 
 import psycopg2
 from psycopg2 import Error, pool
@@ -17,6 +18,8 @@ DB_NAME = "music"
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD = "admin123"
 UNKNOWN_GENRE = "\u672a\u77e5"
+BASE_DIR = Path(__file__).resolve().parent
+SONGS_CSV = BASE_DIR / "songs_import_1000.csv"
 # ========================================
 
 _connection_pool = None
@@ -590,7 +593,7 @@ def import_1000_songs_from_csv():
     cursor = conn.cursor()
     inserted = 0
 
-    with open("songs_import_1000.csv", "r", encoding="utf-8-sig") as f:
+    with open(SONGS_CSV, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             title = row["title"]

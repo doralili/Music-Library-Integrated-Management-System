@@ -1,6 +1,7 @@
 import re
+from pathlib import Path
 
-app_file = r'd:\数据库系统\poj1\app.py'
+app_file = Path(__file__).resolve().parent / 'app.py'
 with open(app_file, 'r', encoding='utf-8') as f:
     text = f.read()
 

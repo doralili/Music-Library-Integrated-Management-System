@@ -3,14 +3,34 @@ import streamlit as st
 import base64
 import os
 from contextlib import nullcontext
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+AVATAR_DIR = BASE_DIR / "avatars"
+AUDIO_DIR = BASE_DIR / "audios"
+
+
+def resolve_project_path(path):
+    candidate = Path(str(path))
+    if candidate.is_absolute():
+        return candidate
+    return BASE_DIR / candidate
+
+
+def get_audio_src(audio_url):
+    if not audio_url or str(audio_url).startswith("http"):
+        return audio_url
+    local_audio = resolve_project_path(audio_url)
+    return str(local_audio) if local_audio.exists() else audio_url
 
 def get_avatar_src(avatar_path):
     if not avatar_path:
         return None
     if str(avatar_path).startswith('http'):
         return avatar_path
-    if str(avatar_path).startswith('avatars/') and os.path.exists(avatar_path):
-        with open(avatar_path, "rb") as image_file:
+    local_avatar = resolve_project_path(avatar_path)
+    if str(avatar_path).startswith('avatars/') and local_avatar.exists():
+        with open(local_avatar, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
             extension = str(avatar_path).split('.')[-1].lower()
             return f"data:image/{extension};base64,{encoded_string}"
@@ -351,7 +371,7 @@ else:
         title_text = f"{count_info}🎵 {song_name} - {artist} (专辑: {album})" if count_info else f"🎵 {song_name} - {artist} (专辑: {album})"
         with st.expander(title_text):
             if audio_url:
-                st.audio(audio_url)
+                st.audio(get_audio_src(audio_url))
             action_key = f"song_action_{key_prefix}_{song_id}"
             if playlist_id is not None:
                 scol1, scol2, scol3, scol4, scol5 = st.columns([3, 1, 1, 1, 1])
@@ -876,11 +896,10 @@ else:
                         else:
                             final_avatar = new_avatar
                             if avatar_file is not None:
-                                if not os.path.exists("avatars"):
-                                    os.makedirs("avatars")
+                                AVATAR_DIR.mkdir(exist_ok=True)
                                 ext = avatar_file.name.split('.')[-1]
                                 avatar_path = f"avatars/user_{my_id}.{ext}"
-                                with open(avatar_path, "wb") as f:
+                                with open(resolve_project_path(avatar_path), "wb") as f:
                                     f.write(avatar_file.getbuffer())
                                 final_avatar = avatar_path
 
@@ -1032,13 +1051,13 @@ else:
                                 up = st.file_uploader("上传MP3 *", type=["mp3"], key="add_audio_file")
                                 if up:
                                     import os, uuid
-                                    os.makedirs("audios", exist_ok=True)
+                                    AUDIO_DIR.mkdir(exist_ok=True)
                                     upload_bytes = up.getvalue()
                                     current_upload_key = f"{up.name}:{up.size}"
                                     previous_upload_key = st.session_state.get('add_audio_upload_key')
                                     if previous_upload_key != current_upload_key:
                                         fn = f"audios/{uuid.uuid4()}.mp3"
-                                        with open(fn, "wb") as f:
+                                        with open(resolve_project_path(fn), "wb") as f:
                                             f.write(upload_bytes)
                                         st.session_state.add_audio_uploaded_path = fn
                                         st.session_state.add_audio_upload_key = current_upload_key
